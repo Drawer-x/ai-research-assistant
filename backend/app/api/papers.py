@@ -20,6 +20,9 @@ from app.schemas.paper import PaperTagCreate, PaperUpdate, StatusUpdate, TagCrea
 from app.services.ai_summary_service import generate_paper_summary
 from app.services.paper_service import get_owned_paper, serialize_paper
 from app.services.pdf_parser import extract_text_from_pdf
+from app.services.text_splitter import split_text
+from app.services.embedding_service import get_embeddings
+from app.services.vector_store import save_vector_store
 from app.services.qa_service import answer_question_about_paper
 
 router = APIRouter(tags=["文献与标签"])
@@ -51,6 +54,28 @@ def upload_paper(file: UploadFile = File(...), db: Session = Depends(get_db), cu
     db.add(paper)
     db.commit()
     db.refresh(paper)
+    # =========================
+    # RAG 向量库生成
+    # =========================
+
+    try:
+        chunks = split_text(full_text)
+
+        embeddings = get_embeddings(chunks)
+
+        save_vector_store(
+            paper.id,
+            chunks,
+            embeddings
+        )
+
+    except Exception as e:
+        print("向量库生成失败:", e)
+
+
+    return success_response(
+        serialize_paper(paper, detail=True)
+    )
     return success_response(serialize_paper(paper, detail=True))
 
 
@@ -148,14 +173,14 @@ def remove_tag(paper_id: int, tag_id: int, db: Session = Depends(get_db), curren
 def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    summary = generate_paper_summary(paper.full_text or "")
-    record = AISummary(paper_id=paper.id, content=json.dumps(summary, ensure_ascii=False), is_mock=True, model_name="mock")
+    summary = generate_paper_summary(paper.id, paper.full_text or "")
+    record = AISummary(paper_id=paper.id, content=json.dumps(summary, ensure_ascii=False), is_mock=False, model_name="mock")
     db.add(record); db.commit()
-    return success_response({"paper_id": paper.id, "summary": summary, "is_mock": True})
+    return success_response({"paper_id": paper.id, "summary": summary, "is_mock": False})
 
 
 @router.post("/papers/{paper_id}/qa", tags=["AI Mock"])
 def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    return success_response(answer_question_about_paper(payload.question, paper.full_text or ""))
+    return success_response(answer_question_about_paper(payload.question, paper.id))
