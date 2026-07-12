@@ -1,0 +1,31 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+class Settings(BaseSettings):
+    app_name: str = "AI Research Assistant API"
+    database_url: str = f"sqlite:///{(BACKEND_DIR / 'ai_research_assistant.db').as_posix()}"
+    secret_key: str = "development-only-change-this-secret-key"
+    access_token_expire_minutes: int = 1440
+    upload_dir: str = "uploads"
+    algorithm: str = "HS256"
+
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
+
+    @property
+    def upload_path(self) -> Path:
+        path = Path(self.upload_dir)
+        return path if path.is_absolute() else BACKEND_DIR / path
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

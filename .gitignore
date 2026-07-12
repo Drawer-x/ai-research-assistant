@@ -27,6 +27,9 @@ Thumbs.db
 # Uploaded files
 uploads/
 *.pdf
+!backend/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # Database
 *.db
