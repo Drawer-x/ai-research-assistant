@@ -2,11 +2,7 @@
 
 AI 驱动的科研文献分析平台，面向学生和科研人员，提供文献管理、AI 阅读、文献关系图和 Agent 科研规划等功能。
 
-## 项目目标
-
-本项目希望解决科研过程中论文数量多、阅读成本高、文献关系复杂、研究规划困难等问题。
-
-## 核心功能
+## 一、项目模块
 
 - 用户登录注册
 - PDF 文献上传与管理
@@ -17,28 +13,18 @@ AI 驱动的科研文献分析平台，面向学生和科研人员，提供文�
 - Agent 科研规划
 - 多论文对比与综述辅助
 
-## 技术栈
+## 二、成员分工
 
-- 前端：Vue 3 / React
-- 后端：FastAPI
-- 数据库：MySQL / PostgreSQL / SQLite
-- PDF 解析：PyMuPDF
-- AI 能力：大模型 API + RAG
-- 图谱可视化：ECharts / AntV G6
-- 部署：Docker / 本地部署
-
-## 小组成员分工
-
-| 成员 | 角色 | 主要职责 |
+| 成员 | 角色 | 主要目录 |
 |---|---|---|
-| 成员 A | 组长 / 后端负责人 | 项目管理、后端接口、数据库、Git 协作 |
-| 成员 B | AI 负责人 | PDF 解析、AI 总结、AI 问答、Agent 规划 |
-| 成员 C | 前端负责人 | 页面开发、交互设计、关系图可视化 |
-| 成员 D | 测试与文档负责人 | 测试文档、部署文档、周报、最终汇报 |
+| 成员 A | 后端负责人 / 组长 | `backend/`, `docs/design/` |
+| 成员 B | AI 模块负责人 | `backend/app/services/` |
+| 成员 C | 前端负责人 | `frontend/` |
+| 成员 D | 测试与文档负责人 | `docs/test/`, `docs/deployment/`, `docs/sprint/` |
 
-## Sprint 计划
+## 三、目录说明
 
-- Sprint 0：项目立项、需求分析、敏捷规划、Git 初始化
-- Sprint 1：基础框架、登录注册、文献管理
-- Sprint 2：PDF 解析、AI 阅读、论文问答
-- Sprint 3：文献关系图、Agent 科研规划、测试部署、最终展示
+详见：
+
+```text
+docs/design/project_structure.md
