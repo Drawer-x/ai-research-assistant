@@ -35,6 +35,10 @@ backend/uploads/*
 *.db
 *.sqlite3
 
+# Generated vector indexes
+backend/vector_db/*.index
+backend/vector_db/*.pkl
+
 # Logs
 logs/
 *.log

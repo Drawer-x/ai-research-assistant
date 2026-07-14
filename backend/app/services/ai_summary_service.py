@@ -1,81 +1,67 @@
+"""Generate a structured paper summary with a deterministic local fallback."""
+
 import json
 import re
 
-from .llm_client import chat_with_deepseek
+from app.core.config import settings
+from app.services.llm_client import LLMServiceError, chat_with_deepseek
+
+
+SUMMARY_FIELDS = (
+    "background", "problem", "method", "experiment", "result", "innovation", "limitation",
+)
+
+
+def _extract_json(text: str) -> dict:
+    cleaned = re.sub(r"```(?:json)?|```", "", text, flags=re.IGNORECASE).strip()
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+        if not match:
+            raise
+        data = json.loads(match.group())
+    if not isinstance(data, dict):
+        raise ValueError("模型返回值不是 JSON 对象")
+    return {field: str(data.get(field) or "未提及").strip() for field in SUMMARY_FIELDS}
+
+
+def _local_fallback(paper_text: str) -> dict:
+    normalized = re.sub(r"\s+", " ", paper_text).strip()
+    preview = normalized[:800] if normalized else "未提取到论文正文"
+    return {
+        "background": preview,
+        "problem": "AI 服务暂不可用，请稍后重新生成以提取研究问题。",
+        "method": "AI 服务暂不可用，未自动提取核心方法。",
+        "experiment": "AI 服务暂不可用，未自动提取实验设置。",
+        "result": "AI 服务暂不可用，未自动提取实验结果。",
+        "innovation": "AI 服务暂不可用，未自动提取创新点。",
+        "limitation": "AI 服务暂不可用，未自动提取局限性。",
+    }
+
+
+def generate_paper_summary_result(paper_text: str) -> tuple[dict, bool, str]:
+    """Return ``(summary, is_mock, model_name)`` for correct persistence."""
+    if not paper_text.strip():
+        return _local_fallback(paper_text), True, "local-fallback"
+
+    prompt = f"""
+你是一名专业科研助手。请严格根据下面的论文内容生成结构化总结。
+
+要求：
+1. 只输出 JSON，不要输出 Markdown 代码块。
+2. 不得编造原文中不存在的信息；缺失的信息填写“未提及”。
+3. JSON 必须包含 background、problem、method、experiment、result、innovation、limitation。
+
+论文内容：
+{paper_text[:15_000]}
+""".strip()
+    try:
+        return _extract_json(chat_with_deepseek(prompt)), False, settings.ecnu_chat_model
+    except (LLMServiceError, ValueError, TypeError, json.JSONDecodeError):
+        return _local_fallback(paper_text), True, "local-fallback"
 
 
 def generate_paper_summary(paper_text: str) -> dict:
-    """
-    根据论文全文生成结构化总结
-    """
-
-    # 防止输入过长
-    max_length = 15000
-    if len(paper_text) > max_length:
-        paper_text = paper_text[:max_length]
-
-    prompt = f"""
-你是一名专业科研助手，请阅读下面的论文内容，
-生成结构化论文总结。
-
-要求：
-1. 只能输出JSON，不要输出Markdown代码块
-2. 不要编造论文中不存在的信息
-3. 如果论文没有相关内容，填写"未提及"
-
-输出格式必须严格如下：
-
-{{
-    "background": "研究背景",
-    "problem": "论文解决的问题",
-    "method": "核心方法",
-    "experiment": "实验设置",
-    "result": "主要实验结果",
-    "innovation": "创新点",
-    "limitation": "局限性"
-}}
-
-论文内容：
-
-{paper_text}
-"""
-
-    try:
-        result = chat_with_deepseek(prompt)
-    except Exception:
-        return {
-            "background": "这里是论文研究背景，占位数据",
-            "problem": "这里是论文要解决的问题，占位数据",
-            "method": "这里是论文核心方法，占位数据",
-            "experiment": "这里是实验设置，占位数据",
-            "result": "这里是主要结果，占位数据",
-            "innovation": "这里是创新点，占位数据",
-            "limitation": "这里是局限性，占位数据",
-            "is_mock": True,
-        }
-
-    try:
-        # 防止模型返回 ```json
-        result = re.sub(
-            r"```json|```",
-            "",
-            result
-        ).strip()
-
-        summary = json.loads(result)
-
-    except Exception:
-
-        summary = {
-            "background": "",
-            "problem": "",
-            "method": "",
-            "experiment": "",
-            "result": "",
-            "innovation": "",
-            "limitation": "",
-            "raw": result
-        }
-
-    summary["is_mock"] = False
-    return summary
+    """Backward-compatible helper returning only summary fields."""
+    return generate_paper_summary_result(paper_text)[0]
