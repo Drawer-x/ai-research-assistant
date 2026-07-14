@@ -1,44 +1,46 @@
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-from openai import OpenAI
+"""Lazy client for the ECNU OpenAI-compatible chat API."""
+
+from functools import lru_cache
+
+from app.core.config import settings
 
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-
-load_dotenv(BASE_DIR / ".env")
-
-
-api_key = os.getenv("ECNU_API_KEY")
+class LLMServiceError(RuntimeError):
+    """Raised when the optional LLM service cannot be used."""
 
 
-if not api_key:
-    raise ValueError(
-        "没有找到 ECNU_API_KEY，请检查 backend/.env"
+@lru_cache
+def _get_client():
+    if not settings.ecnu_api_key:
+        raise LLMServiceError("未配置 ECNU_API_KEY")
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise LLMServiceError("未安装 openai 依赖") from exc
+    return OpenAI(
+        api_key=settings.ecnu_api_key,
+        base_url=settings.ecnu_base_url,
+        timeout=settings.ai_timeout_seconds,
+        max_retries=1,
     )
 
 
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://chat.ecnu.edu.cn/open/api/v1"
-)
-
-
-def chat_with_deepseek(prompt:str):
-
-    response = client.chat.completions.create(
-        model="ecnu-max",
-        messages=[
-            {
-                "role":"system",
-                "content":"你是一名专业科研助手"
-            },
-            {
-                "role":"user",
-                "content":prompt
-            }
-        ],
-        temperature=0.2
-    )
-
-    return response.choices[0].message.content
+def chat_with_deepseek(prompt: str) -> str:
+    """Send a chat request without making application startup depend on AI."""
+    try:
+        response = _get_client().chat.completions.create(
+            model=settings.ecnu_chat_model,
+            messages=[
+                {"role": "system", "content": "你是一名严谨的科研论文阅读助手。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+        )
+        content = response.choices[0].message.content
+        if not content:
+            raise LLMServiceError("模型返回了空内容")
+        return content
+    except LLMServiceError:
+        raise
+    except Exception as exc:
+        raise LLMServiceError(f"AI 服务调用失败：{exc}") from exc

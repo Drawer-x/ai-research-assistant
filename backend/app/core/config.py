@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 1440
     upload_dir: str = "uploads"
     algorithm: str = "HS256"
+    ecnu_api_key: str | None = None
+    ecnu_base_url: str = "https://chat.ecnu.edu.cn/open/api/v1"
+    ecnu_chat_model: str = "ecnu-max"
+    ecnu_embedding_model: str = "ecnu-embedding-small"
+    ai_timeout_seconds: float = 60.0
 
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 

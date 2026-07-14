@@ -1,170 +1,69 @@
-import os
+"""FAISS-backed per-paper vector storage."""
+
 import pickle
+from pathlib import Path
 
-import faiss
-import numpy as np
-
-
-
-VECTOR_DIR = "vector_db"
+from app.core.config import BACKEND_DIR
 
 
-def search_vector_store(
-        paper_id,
-        query_embedding,
-        top_k=5
-):
-
-    index_path=f"vector_db/{paper_id}.index"
-
-    index=faiss.read_index(
-        index_path
-    )
+VECTOR_DIR = BACKEND_DIR / "vector_db"
 
 
-    distances, ids = index.search(
-        np.array([query_embedding]),
-        top_k
-    )
+def _dependencies():
+    try:
+        import faiss
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("向量检索需要安装 faiss-cpu 和 numpy") from exc
+    return faiss, np
 
 
-    with open(
-        f"vector_db/{paper_id}.pkl",
-        "rb"
-    ) as f:
-        chunks=pickle.load(f)
+def _paths(paper_id: int) -> tuple[Path, Path]:
+    if paper_id <= 0:
+        raise ValueError("paper_id 必须是正整数")
+    return VECTOR_DIR / f"{paper_id}.index", VECTOR_DIR / f"{paper_id}.pkl"
 
 
-    result=[]
+def save_vector_store(paper_id: int, chunks: list[str], embeddings: list[list[float]]) -> None:
+    if not chunks or not embeddings:
+        raise ValueError("chunks 和 embeddings 不能为空")
+    if len(chunks) != len(embeddings):
+        raise ValueError("文本分块数与向量数不一致")
 
-    for i in ids[0]:
-        if i!=-1:
-            result.append(
-                chunks[i]
-            )
+    faiss, np = _dependencies()
+    vectors = np.asarray(embeddings, dtype="float32")
+    if vectors.ndim != 2 or vectors.shape[1] == 0:
+        raise ValueError("向量维度无效")
 
-    return result
-def save_vector_store(
-        paper_id,
-        chunks,
-        embeddings
-):
-
-    """
-    保存论文向量库
-    """
-
-
-    os.makedirs(
-        VECTOR_DIR,
-        exist_ok=True
-    )
-
-
-    vectors = np.array(
-        embeddings
-    ).astype("float32")
-
-
-    dimension = vectors.shape[1]
-
-
-    index = faiss.IndexFlatL2(
-        dimension
-    )
-
-
+    VECTOR_DIR.mkdir(parents=True, exist_ok=True)
+    index_path, data_path = _paths(paper_id)
+    index = faiss.IndexFlatL2(vectors.shape[1])
     index.add(vectors)
+    faiss.write_index(index, str(index_path))
+    with data_path.open("wb") as output:
+        pickle.dump(chunks, output)
 
 
-    index_path = (
-        f"{VECTOR_DIR}/{paper_id}.index"
-    )
+def search_similar_chunks(paper_id: int, query_embedding: list[float], top_k: int = 3) -> list[str]:
+    faiss, np = _dependencies()
+    index_path, data_path = _paths(paper_id)
+    if not index_path.exists() or not data_path.exists():
+        raise FileNotFoundError("该论文尚未生成向量索引")
+
+    index = faiss.read_index(str(index_path))
+    with data_path.open("rb") as source:
+        chunks = pickle.load(source)
+    if not chunks:
+        return []
+
+    query = np.asarray([query_embedding], dtype="float32")
+    if query.ndim != 2 or query.shape[1] != index.d:
+        raise ValueError("查询向量维度与索引不一致")
+    limit = max(1, min(int(top_k), len(chunks)))
+    _, indices = index.search(query, limit)
+    return [chunks[index] for index in indices[0] if 0 <= index < len(chunks)]
 
 
-    data_path = (
-        f"{VECTOR_DIR}/{paper_id}.pkl"
-    )
-
-
-    faiss.write_index(
-        index,
-        index_path
-    )
-
-
-    with open(
-        data_path,
-        "wb"
-    ) as f:
-
-        pickle.dump(
-            chunks,
-            f
-        )
-
-
-
-
-def search_similar_chunks(
-        paper_id,
-        query_embedding,
-        top_k=3
-):
-
-    """
-    根据问题搜索相关论文片段
-    """
-
-
-    index_path = (
-        f"{VECTOR_DIR}/{paper_id}.index"
-    )
-
-
-    data_path = (
-        f"{VECTOR_DIR}/{paper_id}.pkl"
-    )
-
-
-    index = faiss.read_index(
-        index_path
-    )
-
-
-    with open(
-        data_path,
-        "rb"
-    ) as f:
-
-        chunks = pickle.load(f)
-
-
-
-    query = np.array(
-        [query_embedding]
-    ).astype(
-        "float32"
-    )
-
-
-    distances, indices = index.search(
-        query,
-        top_k
-    )
-
-
-
-    results=[]
-
-
-    for idx in indices[0]:
-
-        if idx < len(chunks):
-
-            results.append(
-                chunks[idx]
-            )
-
-
-    return results
+def search_vector_store(paper_id: int, query_embedding: list[float], top_k: int = 5) -> list[str]:
+    """Compatibility alias for older callers."""
+    return search_similar_chunks(paper_id, query_embedding, top_k)

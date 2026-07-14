@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.user import User
 from app.services.graph_service import build_paper_graph
 
-router = APIRouter(prefix="/graph", tags=["关系图 Mock"])
+router = APIRouter(prefix="/graph", tags=["文献关系图"])
 
 
 @router.get("/papers")

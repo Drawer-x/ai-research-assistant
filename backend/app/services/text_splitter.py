@@ -18,6 +18,11 @@ def split_text(
         重叠区域，避免语义断裂
     """
 
+    if chunk_size <= 0:
+        raise ValueError("chunk_size 必须大于 0")
+    if overlap < 0 or overlap >= chunk_size:
+        raise ValueError("overlap 必须大于等于 0 且小于 chunk_size")
+
     chunks = []
 
     start = 0
