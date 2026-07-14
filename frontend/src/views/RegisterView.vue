@@ -94,7 +94,7 @@
 
           <div class="register-footer">
             <span>已有账号？</span>
-            <el-link type="primary" @click="$router.push('/login')" :underline="false">
+            <el-link type="primary" @click="$router.push('/login')" underline="never">
               立即登录
             </el-link>
           </div>
@@ -162,7 +162,7 @@ const handleRegister = async () => {
         password: registerForm.password
       })
 
-      if (res.data.code === 0) {
+      if (res.data.code === 200 || res.data.code === 0) {
         ElMessage.success('注册成功！请登录')
         router.push('/login')
       } else {

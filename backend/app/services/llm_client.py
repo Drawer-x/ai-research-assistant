@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import OpenAI
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -9,23 +8,16 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
 
 
-api_key = os.getenv("ECNU_API_KEY")
-
-
-if not api_key:
-    raise ValueError(
-        "没有找到 ECNU_API_KEY，请检查 backend/.env"
-    )
-
-
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://chat.ecnu.edu.cn/open/api/v1"
-)
-
-
-def chat_with_deepseek(prompt:str):
-
+def chat_with_deepseek(prompt: str):
+    """Call the optional ECNU model without making application import depend on it."""
+    api_key = os.getenv("ECNU_API_KEY")
+    if not api_key:
+        raise RuntimeError("ECNU_API_KEY 未配置")
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError("openai 依赖未安装") from exc
+    client = OpenAI(api_key=api_key, base_url="https://chat.ecnu.edu.cn/open/api/v1")
     response = client.chat.completions.create(
         model="ecnu-max",
         messages=[

@@ -45,4 +45,11 @@ const router = createRouter({
   ]
 })
 
+router.beforeEach((to) => {
+  const publicPages = ['/login', '/register']
+  const token = localStorage.getItem('token')
+  if (!publicPages.includes(to.path) && !token) return '/login'
+  if (publicPages.includes(to.path) && token) return '/papers'
+})
+
 export default router

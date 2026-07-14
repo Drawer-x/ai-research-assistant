@@ -44,18 +44,18 @@
         </div>
         <div class="overview-item">
           <span class="overview-label">总时长</span>
-          <span class="overview-value">{{ plan.total_weeks || '4 周' }}</span>
+          <span class="overview-value">{{ plan.weekly_plan?.length || 4 }} 周</span>
         </div>
         <div class="overview-item">
           <span class="overview-label">阶段数</span>
-          <span class="overview-value">{{ plan.phases?.length || 0 }} 个阶段</span>
+          <span class="overview-value">{{ plan.stages?.length || 0 }} 个阶段</span>
         </div>
       </div>
 
       <!-- 阶段详情 -->
       <div class="plan-phases">
         <div
-          v-for="(phase, index) in plan.phases"
+          v-for="(phase, index) in plan.stages"
           :key="index"
           class="phase-card"
           :style="{ borderLeftColor: phaseColors[index % phaseColors.length] }"
@@ -71,7 +71,7 @@
           </div>
 
           <div class="phase-goal">
-            <strong>🎯 目标：</strong>{{ phase.goal }}
+            <strong>🎯 目标：</strong>{{ phase.goal || phase.output }}
           </div>
 
           <div class="phase-tasks">
@@ -99,8 +99,8 @@
             </div>
           </div>
 
-          <div class="phase-deliverable" v-if="phase.deliverable">
-            <strong>📦 产出：</strong>{{ phase.deliverable }}
+          <div class="phase-deliverable" v-if="phase.output || phase.deliverable">
+            <strong>📦 产出：</strong>{{ phase.output || phase.deliverable }}
           </div>
         </div>
       </div>
@@ -163,7 +163,9 @@ const generatePlan = async () => {
   loading.value = true
   try {
     const res = await axios.post('/api/agent/research-plan', {
-      topic: researchTopic.value.trim()
+      topic: researchTopic.value.trim(),
+      level: 'beginner',
+      duration_weeks: 4
     })
 
     if (res.data.code === 200 || res.data.code === 0) {
@@ -187,7 +189,7 @@ const loadMockPlan = () => {
   plan.value = {
     topic: researchTopic.value || '时间序列预测中的 Transformer 方法',
     total_weeks: '4 周',
-    phases: [
+    stages: [
       {
         name: '基础知识构建',
         goal: '掌握时间序列分析和 Transformer 的基础知识',
@@ -276,8 +278,8 @@ const exportPlan = () => {
   if (!plan.value) return
   let text = `📚 科研计划\n`
   text += `研究目标：${plan.value.topic}\n`
-  text += `总时长：${plan.value.total_weeks}\n\n`
-  plan.value.phases.forEach((p, i) => {
+  text += `总时长：${plan.value.weekly_plan?.length || 4} 周\n\n`
+  plan.value.stages.forEach((p, i) => {
     text += `【Phase ${i+1}】${p.name}（${p.weeks}）\n`
     text += `目标：${p.goal}\n`
     text += `任务：\n${p.tasks.map(t => `  - ${t}`).join('\n')}\n`
@@ -302,7 +304,7 @@ const exportPlan = () => {
 const copyPlan = () => {
   if (!plan.value) return
   let text = `📚 科研计划：${plan.value.topic}\n\n`
-  plan.value.phases.forEach((p, i) => {
+  plan.value.stages.forEach((p, i) => {
     text += `【Phase ${i+1}】${p.name}\n`
     text += `目标：${p.goal}\n`
     text += `任务：${p.tasks.join('；')}\n`

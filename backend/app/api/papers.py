@@ -73,9 +73,6 @@ def upload_paper(file: UploadFile = File(...), db: Session = Depends(get_db), cu
         print("向量库生成失败:", e)
 
 
-    return success_response(
-        serialize_paper(paper, detail=True)
-    )
     return success_response(serialize_paper(paper, detail=True))
 
 
@@ -173,14 +170,16 @@ def remove_tag(paper_id: int, tag_id: int, db: Session = Depends(get_db), curren
 def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    summary = generate_paper_summary(paper.id, paper.full_text or "")
-    record = AISummary(paper_id=paper.id, content=json.dumps(summary, ensure_ascii=False), is_mock=False, model_name="mock")
+    summary = generate_paper_summary(paper.full_text or "")
+    is_mock = bool(summary.pop("is_mock", False))
+    record = AISummary(paper_id=paper.id, content=json.dumps(summary, ensure_ascii=False), is_mock=is_mock,
+                       model_name="mock" if is_mock else "ecnu-max")
     db.add(record); db.commit()
-    return success_response({"paper_id": paper.id, "summary": summary, "is_mock": False})
+    return success_response({"paper_id": paper.id, "summary": summary, "is_mock": is_mock})
 
 
 @router.post("/papers/{paper_id}/qa", tags=["AI Mock"])
 def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    return success_response(answer_question_about_paper(payload.question, paper.id))
+    return success_response(answer_question_about_paper(payload.question, paper.full_text or "", paper_id=paper.id))

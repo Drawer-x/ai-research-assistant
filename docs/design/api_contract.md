@@ -1,6 +1,6 @@
 # Sprint 1 后端 API 契约
 
-本文档定义 AI 驱动科研文献分析平台 Sprint 1 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答、关系图关系边和 Agent 科研规划在 Sprint 1 为 mock 或占位能力。
+本文档定义 AI 驱动科研文献分析平台 Sprint 1 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答和 Agent 科研规划可调用成员 B 的 service；未配置 `ECNU_API_KEY`、远端调用失败或 RAG 数据不可用时自动降级为 mock。关系图边仅使用数据库已有关系。
 
 ## 统一响应
 
@@ -130,10 +130,10 @@ AI 总结响应的 `data`：
 {"topic":"时间序列预测中的 Transformer 模型","stages":[{"name":"背景学习","tasks":["阅读综述论文","了解基础概念"],"output":"完成研究背景笔记"}],"weekly_plan":[{"week":1,"goal":"了解基础概念","tasks":["阅读 2 篇相关论文","整理研究笔记"]}],"risks":["选题范围较大，建议先聚焦具体任务"],"is_mock":true}
 ```
 
-## Mock 边界
+## AI 与 Mock 降级边界
 
-- `generate_paper_summary` 返回固定结构化占位内容，但会写入 `ai_summaries`。
-- `answer_question_about_paper` 返回固定回答，不做检索或真实证据引用。
+- `generate_paper_summary` 优先调用可用的 AI service，失败时返回固定结构化占位内容；两种结果都会写入 `ai_summaries` 并通过 `is_mock` 区分。
+- `answer_question_about_paper` 优先使用向量检索与 AI 回答；缺少 Key、索引或依赖异常时返回固定回答和空证据。
 - 关系图节点来自数据库；关系边仅来自已有 `paper_relations`，Sprint 1 不自动推断关系。
-- `generate_research_plan` 按周数生成占位计划，并写入 `research_plans`。
+- `generate_research_plan` 优先调用 AI service，失败时按周数生成占位计划，并写入 `research_plans`。
 - PDF 文本通过 PyMuPDF 尝试提取；标题和摘要自动识别仍是占位能力。

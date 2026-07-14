@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 const instance = axios.create({
-  baseURL: '',  // 清空 baseURL，让请求路径完整地走代理
+  // Vite 开发环境默认走 /api 代理；部署时可通过 VITE_API_BASE_URL 指向后端。
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 30000,
 })
 
@@ -21,9 +22,7 @@ instance.interceptors.request.use(
 
 // 响应拦截器：统一处理错误
 instance.interceptors.response.use(
-  (response) => {
-    return response
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       // token 过期或无效，跳转到登录页

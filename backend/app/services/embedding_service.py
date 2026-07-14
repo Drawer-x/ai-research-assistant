@@ -1,12 +1,15 @@
 import os
 
-from openai import OpenAI
 
-
-client = OpenAI(
-    api_key=os.getenv("ECNU_API_KEY"),
-    base_url="https://chat.ecnu.edu.cn/open/api/v1"
-)
+def _get_client():
+    api_key = os.getenv("ECNU_API_KEY")
+    if not api_key:
+        raise RuntimeError("ECNU_API_KEY 未配置")
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError("openai 依赖未安装") from exc
+    return OpenAI(api_key=api_key, base_url="https://chat.ecnu.edu.cn/open/api/v1")
 
 
 
@@ -16,7 +19,7 @@ def get_embedding(text: str):
     获取文本向量
     """
 
-    response = client.embeddings.create(
+    response = _get_client().embeddings.create(
         model="ecnu-embedding-small",
         input=text
     )

@@ -211,14 +211,17 @@ const renderChart = () => {
           fontWeight: 500,
           color: '#333',
           offset: [0, 8],
-          formatter: (p) => p.data.label?.length > 15 ? p.data.label.slice(0, 15) + '...' : p.data.label
+          formatter: (p) => {
+            const text = p.data.label || p.data.name || ''
+            return text.length > 15 ? text.slice(0, 15) + '...' : text
+          }
         }
       })),
       links: edges.value.map(edge => ({
         ...edge,
         label: {
           show: true,
-          formatter: edge.type,
+          formatter: edge.label || edge.relation_type || edge.type,
           fontSize: 10,
           color: '#999',
           offset: [0, -8]
@@ -272,7 +275,10 @@ const updateNodeRelations = (node) => {
     .map(e => {
       const targetId = e.source === node.id ? e.target : e.source
       const targetNode = nodes.value.find(n => n.id === targetId)
-      return { target: targetNode?.label || '未知', type: e.type || '关联' }
+      return {
+        target: targetNode?.label || targetNode?.name || '未知',
+        type: e.label || e.relation_type || e.type || '关联'
+      }
     })
   nodeRelations.value = related
 }

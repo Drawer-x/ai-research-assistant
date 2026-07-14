@@ -1,324 +1,135 @@
 <template>
-  <div class="papers-container">
-    <!-- 顶部操作栏 -->
-    <div class="papers-header">
-      <div class="header-left">
-        <h1 class="page-title">📄 我的文献库</h1>
-        <el-tag type="info" size="large">共 {{ papers.length }} 篇</el-tag>
-      </div>
-      <div class="header-right">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索论文标题..."
-          style="width: 260px; margin-right: 16px"
-          clearable
-          prefix-icon="Search"
-        />
-        <el-button type="warning" @click="$router.push('/agent')" style="margin-right: 12px;">
-          <el-icon><Magic /></el-icon> Agent 规划
-        </el-button>
-        <el-button type="success" @click="$router.push('/graph')" style="margin-right: 12px;">
-          <el-icon><Share /></el-icon> 关系图
-        </el-button>
-        <el-button type="primary" size="large" @click="showUpload = true">
-          <el-icon><Upload /></el-icon>
-          上传论文
-        </el-button>
-      </div>
+  <div class="page" v-loading="loading">
+    <div class="toolbar">
+      <el-button @click="router.push('/papers')">返回文献库</el-button>
+      <el-button type="danger" plain @click="removePaper">删除文献</el-button>
     </div>
 
-    <!-- 论文卡片网格 -->
-    <div class="papers-grid" v-if="filteredPapers.length > 0">
-      <el-card
-        v-for="paper in filteredPapers"
-        :key="paper.id"
-        class="paper-card"
-        shadow="hover"
-        @click="goToDetail(paper.id)"
-      >
-        <div class="paper-card-header">
-          <h3 class="paper-title">{{ paper.title }}</h3>
-          <el-tag :type="getStatusType(paper.status)" size="small">
-            {{ paper.status || '未读' }}
-          </el-tag>
-        </div>
-        <div class="paper-meta">
-          <span v-if="paper.authors" class="paper-authors">
-            <el-icon><User /></el-icon>
-            {{ paper.authors }}
-          </span>
-          <span v-if="paper.year" class="paper-year">
-            <el-icon><Calendar /></el-icon>
-            {{ paper.year }}
-          </span>
-        </div>
-        <div class="paper-tags" v-if="paper.tags && paper.tags.length > 0">
-          <el-tag
-            v-for="tag in paper.tags"
-            :key="tag"
-            size="small"
-            type="warning"
-            style="margin-right: 4px; margin-top: 4px"
-          >
-            #{{ tag }}
-          </el-tag>
-        </div>
-        <div class="paper-card-footer">
-          <span class="paper-date">上传于 {{ formatDate(paper.created_at) }}</span>
-        </div>
-      </el-card>
-    </div>
+    <el-card v-if="paper" class="section">
+      <template #header><strong>文献信息</strong></template>
+      <el-form :model="form" label-width="90px">
+        <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
+        <el-form-item label="作者"><el-input v-model="form.authors" /></el-form-item>
+        <el-form-item label="年份"><el-input-number v-model="form.year" :min="0" :max="9999" /></el-form-item>
+        <el-form-item label="发表场所"><el-input v-model="form.venue" /></el-form-item>
+        <el-form-item label="摘要"><el-input v-model="form.abstract" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item><el-button type="primary" @click="savePaper">保存修改</el-button></el-form-item>
+      </el-form>
+    </el-card>
 
-    <!-- 空状态 -->
-    <el-empty v-else description="暂无文献，点击右上角上传你的第一篇论文吧！" />
+    <el-card v-if="paper" class="section">
+      <template #header><strong>阅读状态与标签</strong></template>
+      <div class="row">
+        <el-select v-model="readStatus" @change="saveStatus">
+          <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+        <el-tag v-for="tag in paper.tags" :key="tag.id" closable @close="removeTag(tag.id)">{{ tag.name }}</el-tag>
+        <el-input v-model="newTag" placeholder="新标签" style="width:180px" @keyup.enter="addTag" />
+        <el-button @click="addTag">添加标签</el-button>
+      </div>
+    </el-card>
 
-    <!-- 上传对话框 -->
-    <el-dialog v-model="showUpload" title="上传论文" width="500px">
-      <el-upload
-        ref="uploadRef"
-        drag
-        action="/api/papers/upload"
-        :headers="uploadHeaders"
-        :on-success="onUploadSuccess"
-        :on-error="onUploadError"
-        accept=".pdf"
-        name="file"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">
-          拖拽 PDF 文件到此处，或 <em>点击上传</em>
-        </div>
-        <template #tip>
-          <div class="el-upload__tip">
-            仅支持 PDF 格式，文件大小不超过 50MB
-          </div>
-        </template>
-      </el-upload>
-    </el-dialog>
+    <el-card v-if="paper" class="section">
+      <template #header><strong>AI 论文阅读</strong></template>
+      <el-button type="primary" :loading="summaryLoading" @click="generateSummary">生成 AI 总结</el-button>
+      <el-tag v-if="summaryMock" type="warning" class="mock-tag">Mock</el-tag>
+      <el-descriptions v-if="summary" :column="1" border class="result">
+        <el-descriptions-item v-for="(value, key) in summary" :key="key" :label="summaryLabels[key] || key">{{ value }}</el-descriptions-item>
+      </el-descriptions>
+
+      <div class="qa-row">
+        <el-input v-model="question" placeholder="输入关于这篇论文的问题" @keyup.enter="askQuestion" />
+        <el-button type="success" :loading="qaLoading" @click="askQuestion">提问</el-button>
+      </div>
+      <el-alert v-if="answer" :title="answer.answer" type="success" :closable="false" show-icon class="result" />
+      <ul v-if="answer?.evidence?.length" class="evidence">
+        <li v-for="(item, index) in answer.evidence" :key="index">{{ item }}</li>
+      </ul>
+    </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Upload, UploadFilled, User, Calendar, Search, Magic, Share } from '@element-plus/icons-vue'
-import axios from '../utils/axios'
+import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import api from '../utils/axios'
 
+const route = useRoute()
 const router = useRouter()
-const papers = ref([])
-const searchKeyword = ref('')
-const showUpload = ref(false)
-const uploadRef = ref(null)
+const paperId = route.params.id
+const paper = ref(null)
+const loading = ref(false)
+const summaryLoading = ref(false)
+const qaLoading = ref(false)
+const readStatus = ref('unread')
+const newTag = ref('')
+const question = ref('')
+const summary = ref(null)
+const summaryMock = ref(false)
+const answer = ref(null)
+const form = reactive({ title: '', authors: '', year: null, venue: '', abstract: '' })
+const statusOptions = [
+  ['unread', '未读'], ['rough_read', '粗读'], ['intensive_read', '精读'],
+  ['to_reproduce', '待复现'], ['for_review', '待综述'], ['archived', '已归档']
+].map(([value, label]) => ({ value, label }))
+const summaryLabels = { background: '研究背景', problem: '研究问题', method: '核心方法', experiment: '实验设置', result: '主要结果', innovation: '创新点', limitation: '局限性' }
 
-// ===== 上传请求头 =====
-const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-}))
-
-// ===== 搜索过滤 =====
-const filteredPapers = computed(() => {
-  if (!searchKeyword.value) return papers.value
-  return papers.value.filter(p =>
-    p.title?.toLowerCase().includes(searchKeyword.value.toLowerCase())
-  )
-})
-
-// ===== 辅助函数 =====
-const getStatusType = (status) => {
-  const map = {
-    '已读': 'success',
-    '在读': 'warning',
-    '未读': 'info'
-  }
-  return map[status] || 'info'
+const applyPaper = (data) => {
+  paper.value = data
+  Object.assign(form, { title: data.title || '', authors: data.authors || '', year: data.year, venue: data.venue || '', abstract: data.abstract || '' })
+  readStatus.value = data.read_status || 'unread'
 }
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+const loadPaper = async () => {
+  loading.value = true
+  try { applyPaper((await api.get(`/api/papers/${paperId}`)).data.data) }
+  catch (error) { ElMessage.error(error.response?.data?.message || '加载文献失败'); router.push('/papers') }
+  finally { loading.value = false }
 }
-
-// ===== 跳转详情 =====
-const goToDetail = (id) => {
-  router.push(`/papers/${id}`)
+const savePaper = async () => {
+  const { data } = await api.put(`/api/papers/${paperId}`, form)
+  applyPaper(data.data); ElMessage.success('文献信息已保存')
 }
-
-// ===== 加载文献列表 =====
-const loadPapers = async () => {
-  try {
-    const res = await axios.get('/api/papers')
-    if (res.data.code === 200 || res.data.code === 0) {
-      papers.value = res.data.data || []
-    } else {
-      // 如果接口返回非成功状态，使用 Mock
-      loadMockPapers()
-    }
-  } catch (error) {
-    console.warn('加载文献列表失败，使用 Mock 数据:', error)
-    loadMockPapers()
-  }
+const saveStatus = async () => {
+  await api.put(`/api/papers/${paperId}/status`, { read_status: readStatus.value })
+  paper.value.read_status = readStatus.value; ElMessage.success('阅读状态已更新')
 }
-
-// ===== Mock 数据 =====
-const loadMockPapers = () => {
-  papers.value = [
-    {
-      id: 1,
-      title: 'Attention Is All You Need',
-      authors: 'Vaswani et al.',
-      year: '2017',
-      status: '已读',
-      tags: ['Transformer', 'NLP'],
-      created_at: '2026-07-10T10:00:00'
-    },
-    {
-      id: 2,
-      title: 'BERT: Pre-training of Deep Bidirectional Transformers',
-      authors: 'Devlin et al.',
-      year: '2018',
-      status: '在读',
-      tags: ['BERT', '预训练'],
-      created_at: '2026-07-11T14:30:00'
-    },
-    {
-      id: 3,
-      title: 'GPT-3: Language Models are Few-Shot Learners',
-      authors: 'Brown et al.',
-      year: '2020',
-      status: '未读',
-      tags: ['GPT', '大语言模型'],
-      created_at: '2026-07-12T09:15:00'
-    }
-  ]
+const addTag = async () => {
+  if (!newTag.value.trim()) return
+  await api.post(`/api/papers/${paperId}/tags`, { tag_name: newTag.value.trim() })
+  newTag.value = ''; await loadPaper(); ElMessage.success('标签已添加')
 }
-
-// ===== 上传成功 =====
-const onUploadSuccess = (response) => {
-  if (response.code === 200 || response.code === 0) {
-    ElMessage.success('上传成功！')
-    showUpload.value = false
-    loadPapers()
-  } else {
-    ElMessage.error(response.message || '上传失败')
-  }
+const removeTag = async (tagId) => {
+  await api.delete(`/api/papers/${paperId}/tags/${tagId}`)
+  paper.value.tags = paper.value.tags.filter(tag => tag.id !== tagId)
 }
-
-// ===== 上传失败 =====
-const onUploadError = (error) => {
-  console.error('上传失败:', error)
-  ElMessage.error('上传失败，请重试')
+const generateSummary = async () => {
+  summaryLoading.value = true
+  try { const data = (await api.post(`/api/papers/${paperId}/summary`)).data.data; summary.value = data.summary; summaryMock.value = data.is_mock }
+  catch (error) { ElMessage.error(error.response?.data?.message || '总结生成失败') }
+  finally { summaryLoading.value = false }
 }
-
-// ===== 页面加载 =====
-onMounted(() => {
-  loadPapers()
-})
+const askQuestion = async () => {
+  if (!question.value.trim()) return
+  qaLoading.value = true
+  try { answer.value = (await api.post(`/api/papers/${paperId}/qa`, { question: question.value.trim() })).data.data }
+  catch (error) { ElMessage.error(error.response?.data?.message || '问答失败') }
+  finally { qaLoading.value = false }
+}
+const removePaper = async () => {
+  await ElMessageBox.confirm('确定删除这篇文献吗？', '确认删除', { type: 'warning' })
+  await api.delete(`/api/papers/${paperId}`); ElMessage.success('文献已删除'); router.push('/papers')
+}
+onMounted(loadPaper)
 </script>
 
 <style scoped>
-.papers-container {
-  padding: 24px 40px;
-  min-height: 100vh;
-  background: #f5f7fa;
-}
-
-.papers-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1a2332;
-  margin: 0;
-}
-
-.papers-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-}
-
-.paper-card {
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 12px;
-}
-
-.paper-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-}
-
-.paper-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.paper-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a2332;
-  margin: 0 0 8px 0;
-  line-height: 1.4;
-  flex: 1;
-}
-
-.paper-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #8c8f9c;
-  margin-bottom: 10px;
-}
-
-.paper-meta span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.paper-tags {
-  margin-bottom: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.paper-card-footer {
-  border-top: 1px solid #f0f2f5;
-  padding-top: 12px;
-  font-size: 12px;
-  color: #b0b3bf;
-}
-
-@media (max-width: 768px) {
-  .papers-container { padding: 16px; }
-  .papers-header { flex-direction: column; align-items: stretch; }
-  .header-right { flex-wrap: wrap; }
-  .header-right .el-input { width: 100% !important; margin-right: 0 !important; }
-  .papers-grid { grid-template-columns: 1fr; }
-}
+.page { min-height: 100vh; padding: 24px; background: #f5f7fa; }
+.toolbar { max-width: 1000px; margin: 0 auto 16px; display:flex; justify-content:space-between; }
+.section { max-width: 1000px; margin: 0 auto 18px; }
+.row, .qa-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.qa-row { margin-top:24px; flex-wrap:nowrap; }
+.result { margin-top:16px; }
+.mock-tag { margin-left:10px; }
+.evidence { margin:12px 0 0 20px; color:#606266; }
 </style>

@@ -15,7 +15,7 @@
           prefix-icon="Search"
         />
         <el-button type="warning" @click="$router.push('/agent')" style="margin-right: 12px;">
-          <el-icon><Magic /></el-icon> Agent 规划
+          <el-icon><MagicStick /></el-icon> Agent 规划
         </el-button>
         <el-button type="success" @click="$router.push('/graph')" style="margin-right: 12px;">
           <el-icon><Share /></el-icon> 关系图
@@ -34,15 +34,15 @@
     <div class="papers-grid" v-if="filteredPapers.length > 0">
       <el-card
         v-for="paper in filteredPapers"
-        :key="paper.id"
+        :key="paper.paper_id"
         class="paper-card"
         shadow="hover"
-        @click="goToDetail(paper.id)"
+        @click="goToDetail(paper.paper_id)"
       >
         <div class="paper-card-header">
           <h3 class="paper-title">{{ paper.title }}</h3>
-          <el-tag :type="getStatusType(paper.status)" size="small">
-            {{ paper.status || '未读' }}
+          <el-tag :type="getStatusType(paper.read_status)" size="small">
+            {{ getStatusLabel(paper.read_status) }}
           </el-tag>
         </div>
         <div class="paper-meta">
@@ -58,12 +58,12 @@
         <div class="paper-tags" v-if="paper.tags && paper.tags.length > 0">
           <el-tag
             v-for="tag in paper.tags"
-            :key="tag"
+            :key="tag.id"
             size="small"
             type="warning"
             style="margin-right: 4px; margin-top: 4px"
           >
-            #{{ tag }}
+            #{{ tag.name }}
           </el-tag>
         </div>
         <div class="paper-card-footer">
@@ -105,7 +105,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Upload, UploadFilled, User, Calendar, Search, Magic, Share, Edit } from '@element-plus/icons-vue'
+import { Upload, UploadFilled, User, Calendar, Search, MagicStick, Share, Edit } from '@element-plus/icons-vue'
 import axios from '../utils/axios'
 
 const router = useRouter()
@@ -130,12 +130,15 @@ const filteredPapers = computed(() => {
 // ===== 辅助函数 =====
 const getStatusType = (status) => {
   const map = {
-    '已读': 'success',
-    '在读': 'warning',
-    '未读': 'info'
+    intensive_read: 'success', rough_read: 'warning', unread: 'info',
+    to_reproduce: 'danger', for_review: 'primary', archived: 'info'
   }
   return map[status] || 'info'
 }
+const getStatusLabel = (status) => ({
+  unread: '未读', rough_read: '粗读', intensive_read: '精读',
+  to_reproduce: '待复现', for_review: '待综述', archived: '已归档'
+}[status] || '未读')
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
@@ -167,30 +170,30 @@ const loadPapers = async () => {
 const loadMockPapers = () => {
   papers.value = [
     {
-      id: 1,
+      paper_id: 1,
       title: 'Attention Is All You Need',
       authors: 'Vaswani et al.',
       year: '2017',
-      status: '已读',
-      tags: ['Transformer', 'NLP'],
+      read_status: 'intensive_read',
+      tags: [{ id: 1, name: 'Transformer' }, { id: 2, name: 'NLP' }],
       created_at: '2026-07-10T10:00:00'
     },
     {
-      id: 2,
+      paper_id: 2,
       title: 'BERT: Pre-training of Deep Bidirectional Transformers',
       authors: 'Devlin et al.',
       year: '2018',
-      status: '在读',
-      tags: ['BERT', '预训练'],
+      read_status: 'rough_read',
+      tags: [{ id: 3, name: 'BERT' }, { id: 4, name: '预训练' }],
       created_at: '2026-07-11T14:30:00'
     },
     {
-      id: 3,
+      paper_id: 3,
       title: 'GPT-3: Language Models are Few-Shot Learners',
       authors: 'Brown et al.',
       year: '2020',
-      status: '未读',
-      tags: ['GPT', '大语言模型'],
+      read_status: 'unread',
+      tags: [{ id: 5, name: 'GPT' }, { id: 6, name: '大语言模型' }],
       created_at: '2026-07-12T09:15:00'
     },
     {

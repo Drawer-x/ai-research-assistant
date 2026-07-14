@@ -1,30 +1,43 @@
 # AI Research Assistant
 
-AI 驱动的科研文献分析平台，面向学生和科研人员，提供文献管理、AI 阅读、文献关系图和 Agent 科研规划等功能。
+AI 驱动的科研文献分析平台。Sprint 1 支持用户认证、PDF 文献管理、标签与阅读状态、AI 总结与问答、文献关系图和 Agent 科研规划。
 
-## 一、项目模块
+## 启动后端
 
-- 用户登录注册
-- PDF 文献上传与管理
-- 文献标签和阅读状态管理
-- AI 论文总结
-- AI 论文问答
-- 文献关系图
-- Agent 科研规划
-- 多论文对比与综述辅助
+```bash
+cd backend
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+# Windows: copy .env.example .env
+# macOS/Linux: cp .env.example .env
+uvicorn app.main:app --reload
+```
 
-## 二、成员分工
+Swagger：http://127.0.0.1:8000/docs
 
-| 成员 | 角色 | 主要目录 |
-|---|---|---|
-| 成员 A | 后端负责人 / 组长 | `backend/`, `docs/design/` |
-| 成员 B | AI 模块负责人 | `backend/app/services/` |
-| 成员 C | 前端负责人 | `frontend/` |
-| 成员 D | 测试与文档负责人 | `docs/test/`, `docs/deployment/`, `docs/sprint/` |
+`ECNU_API_KEY` 在 Sprint 1 中是可选配置。未配置或 AI/RAG 服务不可用时，后端自动返回结构稳定的 mock 数据。
 
-## 三、目录说明
+## 启动前端
 
-详见：
+前端使用 Vite 8，建议 Node.js 20.19+ 或 22.12+。
 
-```text
-docs/design/project_structure.md
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+打开终端显示的地址（默认 http://localhost:5173）。开发服务器会把 `/api` 代理到 `http://127.0.0.1:8000`。
+
+## 联调顺序
+
+1. 启动后端并访问 Swagger/健康检查。
+2. 启动前端，注册并登录。
+3. 上传 PDF，在文献库进入详情。
+4. 修改元数据和阅读状态，添加或移除标签。
+5. 生成 AI 总结并提交论文问题。
+6. 打开关系图和 Agent 科研规划页面。
+
+接口契约见 `docs/design/api_contract.md`，目录说明见 `docs/design/project_structure.md`。

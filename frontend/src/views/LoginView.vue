@@ -67,7 +67,7 @@
 
           <div class="login-options">
             <el-checkbox v-model="rememberMe">记住我</el-checkbox>
-            <el-link type="primary" :underline="'never'">忘记密码？</el-link>
+            <el-link type="primary" underline="never">忘记密码？</el-link>
           </div>
 
           <el-form-item>
@@ -84,7 +84,7 @@
 
           <div class="login-footer">
             <span>还没有账号？</span>
-            <el-link type="primary" @click="$router.push('/register')" :underline="'never'">
+            <el-link type="primary" @click="$router.push('/register')" underline="never">
               立即注册
             </el-link>
           </div>
@@ -153,7 +153,7 @@ const handleLogin = async () => {
     if (response.data.code === 200) {
       console.log('6. 登录成功，保存 token')
       ElMessage.success('登录成功！')
-      localStorage.setItem('token', response.data.data.access_token)
+      localStorage.setItem('token', response.data.data.token)
       if (rememberMe.value) {
         localStorage.setItem('remember_me', 'true')
       }

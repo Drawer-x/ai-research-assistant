@@ -1,6 +1,6 @@
 # AI 科研文献分析平台后端
 
-Sprint 1 后端基于 FastAPI、SQLAlchemy 和 SQLite，AI 总结、问答、关系图及科研规划当前为 mock 实现。
+Sprint 1 后端基于 FastAPI、SQLAlchemy 和 SQLite。配置 `ECNU_API_KEY` 时可调用成员 B 的 AI/RAG service；未配置、调用失败或向量库不可用时自动降级为 mock，接口结构保持不变。
 
 ## 启动
 
@@ -21,6 +21,8 @@ uvicorn app.main:app --reload
 Swagger: http://127.0.0.1:8000/docs
 
 数据库默认创建为 `backend/ai_research_assistant.db`，上传文件保存到 `backend/uploads/{user_id}/`；两者均被根目录 `.gitignore` 忽略。
+
+本地 Vue 开发服务器的 `http://localhost:5173` 和 `http://127.0.0.1:5173` 已加入 CORS 白名单。
 
 ## 快速联调
 

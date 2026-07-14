@@ -9,3 +9,7 @@ passlib[bcrypt]
 bcrypt<4.1
 python-multipart
 PyMuPDF
+openai
+python-dotenv
+numpy
+faiss-cpu

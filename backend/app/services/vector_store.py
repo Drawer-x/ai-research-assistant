@@ -1,8 +1,11 @@
 import os
 import pickle
 
-import faiss
 import numpy as np
+try:
+    import faiss
+except ImportError:
+    faiss = None
 
 
 
@@ -15,6 +18,8 @@ def search_vector_store(
         top_k=5
 ):
 
+    if faiss is None:
+        raise RuntimeError("faiss-cpu 依赖未安装")
     index_path=f"vector_db/{paper_id}.index"
 
     index=faiss.read_index(
@@ -55,6 +60,10 @@ def save_vector_store(
     """
 
 
+    if not chunks:
+        return
+    if faiss is None:
+        raise RuntimeError("faiss-cpu 依赖未安装")
     os.makedirs(
         VECTOR_DIR,
         exist_ok=True
@@ -117,6 +126,8 @@ def search_similar_chunks(
     """
 
 
+    if faiss is None:
+        raise RuntimeError("faiss-cpu 依赖未安装")
     index_path = (
         f"{VECTOR_DIR}/{paper_id}.index"
     )
