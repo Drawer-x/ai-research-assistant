@@ -1,4 +1,4 @@
-# Sprint 1 后端 API 契约
+# Sprint 1–2 后端 API 契约
 
 本文档定义 AI 驱动科研文献分析平台 Sprint 1 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答和 Agent 科研规划可调用成员 B 的 service；未配置 `ECNU_API_KEY`、远端调用失败或 RAG 数据不可用时自动降级为 mock。关系图边仅使用数据库已有关系。
 
@@ -59,6 +59,10 @@ Content-Type: application/json
 | POST | `/api/papers/{paper_id}/qa` | 是 | mock 论文问答 |
 | GET | `/api/graph/papers` | 是 | ECharts Graph 节点和关系边 |
 | POST | `/api/agent/research-plan` | 是 | 生成并保存 mock 科研规划 |
+| GET | `/api/papers/{paper_id}/summaries` | 是 | 查询当前用户论文的总结历史 |
+| GET | `/api/papers/{paper_id}/qa-records` | 是 | 查询当前用户论文的问答历史 |
+| POST | `/api/papers/compare` | 是 | 对比至少两篇当前用户的论文 |
+| GET | `/api/papers/comparisons` | 是 | 查询当前用户的对比历史 |
 
 ## 请求与返回示例
 
@@ -137,3 +141,57 @@ AI 总结响应的 `data`：
 - 关系图节点来自数据库；关系边仅来自已有 `paper_relations`，Sprint 1 不自动推断关系。
 - `generate_research_plan` 优先调用 AI service，失败时按周数生成占位计划，并写入 `research_plans`。
 - PDF 文本通过 PyMuPDF 尝试提取；标题和摘要自动识别仍是占位能力。
+
+## Sprint 2 AI 结果与对比
+
+以上接口均需要 `Authorization: Bearer <token>`，且仅允许访问当前用户的论文和 AI 结果。API 层通过 `ai_adapter_service` 调用成员 B 的 service；函数缺失、异常或返回结构无效时使用稳定 fallback。
+
+总结历史：
+
+```http
+GET /api/papers/1/summaries
+```
+
+```json
+{"code":200,"message":"success","data":[{"id":1,"paper_id":1,"summary_type":"structured","content":{"background":"..."},"model_name":"fallback-mock","is_mock":true,"created_at":"2026-07-15T10:00:00"}]}
+```
+
+问答请求仍使用 Sprint 1 路径，成功后会写入 `qa_records`：
+
+```http
+POST /api/papers/1/qa
+Content-Type: application/json
+
+{"question":"这篇论文解决了什么问题？"}
+```
+
+问答历史：
+
+```http
+GET /api/papers/1/qa-records
+```
+
+```json
+{"code":200,"message":"success","data":[{"id":1,"paper_id":1,"question":"这篇论文解决了什么问题？","answer":"fallback 回答","evidence":[],"has_evidence":false,"is_mock":true,"created_at":"2026-07-15T10:00:00"}]}
+```
+
+多论文对比：
+
+```http
+POST /api/papers/compare
+Content-Type: application/json
+
+{"paper_ids":[1,2],"compare_dimensions":["problem","method","dataset","result","limitation"]}
+```
+
+```json
+{"code":200,"message":"success","data":{"comparison_id":1,"paper_ids":[1,2],"compare_dimensions":["problem","method","dataset","result","limitation"],"comparison_table":[{"paper_id":1,"title":"Paper A","problem":"待由 AI 提取或 fallback"}],"summary":"这是多论文对比的 fallback 总结，后续可由成员 B 替换为真实 AI 输出。","is_mock":true}}
+```
+
+对比历史：
+
+```http
+GET /api/papers/comparisons
+```
+
+返回当前用户的 `paper_ids`、对比维度、完整结果、`is_mock` 和创建时间，不返回其他用户数据。成员 B 后续只需提供 `app.services.compare_service.compare_papers(papers, compare_dimensions)`，无需修改 API 路径。
