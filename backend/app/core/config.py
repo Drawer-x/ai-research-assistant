@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 1440
     upload_dir: str = "uploads"
     algorithm: str = "HS256"
-    ecnu_api_key: str | None = None
+    # ecnu_api_key: str | None = None
+    ecnu_api_key: str = "sk-610c3609391240cc9f80793cf53a8bce"
     ecnu_base_url: str = "https://chat.ecnu.edu.cn/open/api/v1"
     ecnu_chat_model: str = "ecnu-max"
     ecnu_embedding_model: str = "ecnu-embedding-small"
