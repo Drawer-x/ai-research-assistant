@@ -27,3 +27,20 @@ Swagger: http://127.0.0.1:8000/docs
 ## 快速联调
 
 先调用 `POST /api/auth/register` 和 `POST /api/auth/login`，复制返回的 token。在 Swagger 右上角 Authorize 中输入 token（无需手动添加 `Bearer`），然后调用文献、标签和 mock API。
+
+## Sprint 2 冒烟测试
+
+先启动后端，然后在另一个终端运行：
+
+```bash
+cd backend
+python scripts/sprint2_smoke_test.py
+```
+
+测试其他地址：
+
+```bash
+python scripts/sprint2_smoke_test.py --base-url http://127.0.0.1:8767
+```
+
+脚本会自动注册唯一用户、上传两份临时 PDF，并验证总结/问答落库、多论文对比和历史查询。测试不依赖真实 AI；未配置 `ECNU_API_KEY` 时使用 fallback。
