@@ -13,16 +13,17 @@ from app.core.response import error_response, success_response
 from app.core.security import get_current_user
 from app.database import get_db
 from app.models.paper import Paper
+from app.models.comparison import PaperComparison
+from app.models.qa_record import QARecord
 from app.models.summary import AISummary
 from app.models.tag import Tag
 from app.models.user import User
-from app.schemas.ai import QARequest
+from app.schemas.ai import ComparePapersRequest, QARequest
 from app.schemas.paper import PaperTagCreate, PaperUpdate, StatusUpdate, TagCreate
-from app.services.ai_summary_service import generate_paper_summary_result
+from app.services.ai_adapter_service import safe_answer_question, safe_compare_papers, safe_generate_summary
 from app.services.paper_service import get_owned_paper, paper_with_relations, serialize_paper
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.text_splitter import split_text
-from app.services.qa_service import answer_question_about_paper
 
 router = APIRouter(tags=["文献与标签"])
 logger = logging.getLogger(__name__)
@@ -45,6 +46,13 @@ def _build_vector_store(paper_id: int, full_text: str) -> None:
 def owned_paper_or_error(db: Session, paper_id: int, user_id: int):
     paper = get_owned_paper(db, paper_id, user_id)
     return paper if paper else error_response("文献不存在或无权访问", 404)
+
+
+def _load_json(value: str, default):
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return default
 
 
 @router.post("/papers/upload")
@@ -99,6 +107,74 @@ def list_papers(q: str | None = None, read_status: str | None = None, tag: str |
         statement = statement.join(Paper.tags).where(Tag.name == tag)
     papers = db.scalars(statement.order_by(Paper.created_at.desc())).unique().all()
     return success_response([serialize_paper(p) for p in papers])
+
+
+# Static routes must stay before /papers/{paper_id}.
+@router.post("/papers/compare", tags=["AI 对比"])
+def compare_papers(payload: ComparePapersRequest, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    papers = db.scalars(
+        select(Paper).where(Paper.user_id == current_user.id, Paper.id.in_(payload.paper_ids))
+    ).all()
+    if len(papers) != len(payload.paper_ids):
+        return error_response("部分文献不存在或无权访问", 404)
+    paper_map = {paper.id: paper for paper in papers}
+    ordered_papers = [paper_map[paper_id] for paper_id in payload.paper_ids]
+    paper_data = [
+        {
+            "paper_id": paper.id,
+            "title": paper.title,
+            "authors": paper.authors,
+            "year": paper.year,
+            "venue": paper.venue,
+            "abstract": paper.abstract,
+            "full_text": paper.full_text or "",
+        }
+        for paper in ordered_papers
+    ]
+    result = safe_compare_papers(paper_data, payload.compare_dimensions)
+    response_data = {
+        "paper_ids": payload.paper_ids,
+        "compare_dimensions": payload.compare_dimensions,
+        **result,
+    }
+    record = PaperComparison(
+        user_id=current_user.id,
+        paper_ids_json=json.dumps(payload.paper_ids),
+        compare_dimensions_json=json.dumps(payload.compare_dimensions, ensure_ascii=False),
+        result_json=json.dumps(response_data, ensure_ascii=False),
+        is_mock=bool(result["is_mock"]),
+    )
+    try:
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+    except Exception:
+        db.rollback()
+        logger.exception("用户 %s 的论文对比结果保存失败", current_user.id)
+        return error_response("论文对比成功，但保存失败", 500)
+    response_data["comparison_id"] = record.id
+    return success_response(response_data)
+
+
+@router.get("/papers/comparisons", tags=["AI 对比"])
+def comparison_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    records = db.scalars(
+        select(PaperComparison)
+        .where(PaperComparison.user_id == current_user.id)
+        .order_by(PaperComparison.created_at.desc(), PaperComparison.id.desc())
+    ).all()
+    return success_response([
+        {
+            "id": record.id,
+            "paper_ids": _load_json(record.paper_ids_json, []),
+            "compare_dimensions": _load_json(record.compare_dimensions_json, []),
+            "result": _load_json(record.result_json, {}),
+            "is_mock": record.is_mock,
+            "created_at": record.created_at,
+        }
+        for record in records
+    ])
 
 
 @router.get("/papers/{paper_id}")
@@ -178,7 +254,10 @@ def remove_tag(paper_id: int, tag_id: int, db: Session = Depends(get_db), curren
 def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    summary, is_mock, model_name = generate_paper_summary_result(paper.full_text or "")
+    result = safe_generate_summary(paper.full_text or "")
+    summary = result["summary"]
+    is_mock = result["is_mock"]
+    model_name = result["model_name"]
     record = AISummary(
         paper_id=paper.id,
         content=json.dumps(summary, ensure_ascii=False),
@@ -202,8 +281,75 @@ def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: U
     })
 
 
+@router.get("/papers/{paper_id}/summaries", tags=["AI 阅读"])
+def summary_history(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    paper = owned_paper_or_error(db, paper_id, current_user.id)
+    if not isinstance(paper, Paper):
+        return paper
+    records = db.scalars(
+        select(AISummary)
+        .where(AISummary.paper_id == paper.id)
+        .order_by(AISummary.created_at.desc(), AISummary.id.desc())
+    ).all()
+    return success_response([
+        {
+            "id": record.id,
+            "paper_id": record.paper_id,
+            "summary_type": record.summary_type,
+            "content": _load_json(record.content, record.content),
+            "model_name": record.model_name,
+            "is_mock": record.is_mock,
+            "created_at": record.created_at,
+        }
+        for record in records
+    ])
+
+
 @router.post("/papers/{paper_id}/qa", tags=["AI Mock"])
 def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    return success_response(answer_question_about_paper(payload.question, paper.full_text or "", paper_id=paper.id))
+    result = safe_answer_question(payload.question, paper.full_text or "", paper_id=paper.id)
+    record = QARecord(
+        user_id=current_user.id,
+        paper_id=paper.id,
+        question=payload.question,
+        answer=result["answer"],
+        evidence_json=json.dumps(result["evidence"], ensure_ascii=False),
+        has_evidence=result["has_evidence"],
+        is_mock=result["is_mock"],
+    )
+    try:
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+    except Exception:
+        db.rollback()
+        logger.exception("论文 %s 的问答记录保存失败", paper.id)
+        return error_response("论文问答成功，但保存失败", 500)
+    return success_response({**result, "qa_record_id": record.id})
+
+
+@router.get("/papers/{paper_id}/qa-records", tags=["AI 阅读"])
+def qa_history(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    paper = owned_paper_or_error(db, paper_id, current_user.id)
+    if not isinstance(paper, Paper):
+        return paper
+    records = db.scalars(
+        select(QARecord)
+        .where(QARecord.paper_id == paper.id, QARecord.user_id == current_user.id)
+        .order_by(QARecord.created_at.desc(), QARecord.id.desc())
+    ).all()
+    return success_response([
+        {
+            "id": record.id,
+            "paper_id": record.paper_id,
+            "question": record.question,
+            "answer": record.answer,
+            "evidence": _load_json(record.evidence_json, []),
+            "has_evidence": record.has_evidence,
+            "is_mock": record.is_mock,
+            "created_at": record.created_at,
+        }
+        for record in records
+    ])
