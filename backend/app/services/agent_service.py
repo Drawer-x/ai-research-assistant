@@ -1,7 +1,10 @@
-import json
-import re
+"""Generate validated research plans with a deterministic local fallback."""
 
+from typing import Any
+
+from app.services.ai_errors import AIErrorReason, AIServiceError
 from .llm_client import chat_with_deepseek
+from .structured_output import StructuredOutputError, parse_json_object
 
 
 def _mock_plan(topic: str, duration_weeks: int) -> dict:
@@ -17,15 +20,63 @@ def _mock_plan(topic: str, duration_weeks: int) -> dict:
     }
 
 
+def _string_list(value: Any, field: str) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, f"{field} 必须是非空数组")
+    cleaned = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    if len(cleaned) != len(value):
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, f"{field} 包含无效内容")
+    return cleaned
+
+
+def _validate_plan(data: dict[str, Any], duration_weeks: int) -> dict[str, Any]:
+    raw_stages = data.get("stages")
+    raw_weeks = data.get("weekly_plan")
+    if not isinstance(raw_stages, list) or not raw_stages:
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "stages 必须是非空数组")
+    if not isinstance(raw_weeks, list) or not raw_weeks:
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "weekly_plan 必须是非空数组")
+
+    stages: list[dict[str, Any]] = []
+    for item in raw_stages:
+        if not isinstance(item, dict):
+            raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "stage 结构无效")
+        name, output = item.get("name"), item.get("output")
+        if not isinstance(name, str) or not name.strip() or not isinstance(output, str) or not output.strip():
+            raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "stage 字段不完整")
+        stages.append({"name": name.strip(), "tasks": _string_list(item.get("tasks"), "stage.tasks"), "output": output.strip()})
+
+    weekly_plan: list[dict[str, Any]] = []
+    seen_weeks: set[int] = set()
+    for item in raw_weeks:
+        if not isinstance(item, dict):
+            raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "weekly_plan 结构无效")
+        week, goal = item.get("week"), item.get("goal")
+        if not isinstance(week, int) or isinstance(week, bool) or not 1 <= week <= duration_weeks:
+            raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "weekly_plan.week 超出范围")
+        if week in seen_weeks or not isinstance(goal, str) or not goal.strip():
+            raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "weekly_plan 字段无效")
+        seen_weeks.add(week)
+        weekly_plan.append({"week": week, "goal": goal.strip(), "tasks": _string_list(item.get("tasks"), "weekly_plan.tasks")})
+    if seen_weeks != set(range(1, duration_weeks + 1)):
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "weekly_plan 未覆盖完整周期")
+    weekly_plan.sort(key=lambda item: item["week"])
+    return {"stages": stages, "weekly_plan": weekly_plan, "risks": _string_list(data.get("risks"), "risks")}
+
+
 def generate_research_plan(topic: str, level: str, duration_weeks: int) -> dict:
+    topic = topic.strip() if isinstance(topic, str) else ""
+    level = level.strip() if isinstance(level, str) else ""
+    if not topic:
+        raise ValueError("topic 不能为空")
+    if not level:
+        raise ValueError("level 不能为空")
+    if isinstance(duration_weeks, bool) or not isinstance(duration_weeks, int) or not 1 <= duration_weeks <= 52:
+        raise ValueError("duration_weeks 必须在 1 到 52 之间")
     prompt = f'''用户研究方向：{topic}\n研究水平：{level}\n周期：{duration_weeks}周
-请仅返回 JSON：{{"stages":[],"weekly_plan":[],"risks":[]}}'''
+请仅返回 JSON。stages 每项必须包含 name、tasks、output；weekly_plan 必须覆盖第 1 到 {duration_weeks} 周且每项包含 week、goal、tasks；risks 为非空字符串数组。'''
     try:
-        result = chat_with_deepseek(prompt)
-        data = json.loads(re.sub(r"```json|```", "", result).strip())
-        if not all(isinstance(data.get(key), list) for key in ("stages", "weekly_plan", "risks")):
-            raise ValueError("科研计划结构不完整")
-        data.update({"topic": topic, "is_mock": False})
-        return data
-    except Exception:
+        plan = _validate_plan(parse_json_object(chat_with_deepseek(prompt)), duration_weeks)
+        return {"topic": topic, **plan, "is_mock": False}
+    except AIServiceError:
         return _mock_plan(topic, duration_weeks)
