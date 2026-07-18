@@ -41,10 +41,16 @@ const router = createRouter({
       path: '/review',
       name: 'review',
       component: () => import('../views/ReviewView.vue')
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'notFound',
+      component: () => import('../views/NotFoundView.vue')
     }
   ]
 })
 
+// ===== 路由守卫 =====
 router.beforeEach((to) => {
   const publicPages = ['/login', '/register']
   const token = localStorage.getItem('token')
