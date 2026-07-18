@@ -13,3 +13,6 @@ class GraphEdge(BaseModel):
     target: int
     relation_type: str
     label: str
+    relation_reason: str | None = None
+    confidence: float | None = None
+    inferred: bool = False

@@ -1,6 +1,5 @@
 import json
 import logging
-import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.response import error_response, success_response
 from app.core.security import get_current_user
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models.paper import Paper
 from app.models.comparison import PaperComparison
 from app.models.qa_record import QARecord
@@ -29,16 +28,30 @@ router = APIRouter(tags=["文献与标签"])
 logger = logging.getLogger(__name__)
 
 
-def _build_vector_store(paper_id: int, full_text: str) -> None:
+def _build_vector_store(paper_id: int, user_id: int, full_text: str) -> None:
     """Best-effort background indexing; upload success does not depend on AI."""
     try:
         from app.services.embedding_service import get_embeddings
-        from app.services.vector_store import save_vector_store
+        from app.services.vector_store import delete_vector_store, save_vector_store
 
         chunks = split_text(full_text)
         embeddings = get_embeddings(chunks)
         if chunks and embeddings:
-            save_vector_store(paper_id, chunks, embeddings)
+            with SessionLocal() as db:
+                paper = db.scalar(select(Paper).where(Paper.id == paper_id, Paper.user_id == user_id))
+                if paper is None or (paper.full_text or "") != full_text:
+                    return
+            save_vector_store(
+                paper_id,
+                chunks,
+                embeddings,
+                owner_id=user_id,
+                source_text=full_text,
+            )
+            with SessionLocal() as db:
+                paper = db.scalar(select(Paper).where(Paper.id == paper_id, Paper.user_id == user_id))
+                if paper is None or (paper.full_text or "") != full_text:
+                    delete_vector_store(paper_id, owner_id=user_id, source_text=full_text)
     except Exception:
         logger.exception("论文 %s 的向量索引生成失败", paper_id)
 
@@ -65,9 +78,20 @@ def upload_paper(background_tasks: BackgroundTasks, file: UploadFile = File(...)
     user_dir.mkdir(parents=True, exist_ok=True)
     destination = user_dir / f"{uuid4().hex}_{filename}"
     try:
+        written = 0
+        too_large = False
         with destination.open("wb") as output:
-            shutil.copyfileobj(file.file, output)
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > settings.max_pdf_upload_bytes:
+                    too_large = True
+                    break
+                output.write(chunk)
+        if too_large:
+            destination.unlink(missing_ok=True)
+            return error_response("PDF 文件过大", 413)
     except OSError:
+        destination.unlink(missing_ok=True)
         return error_response("文件保存失败", 500)
     finally:
         file.file.close()
@@ -84,11 +108,17 @@ def upload_paper(background_tasks: BackgroundTasks, file: UploadFile = File(...)
         full_text=full_text or None,
         parse_status="success" if full_text else "failed",
     )
-    db.add(paper)
-    db.commit()
-    db.refresh(paper)
+    try:
+        db.add(paper)
+        db.commit()
+        db.refresh(paper)
+    except Exception as exc:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        logger.error("用户 %s 的上传论文记录保存失败（%s）", current_user.id, type(exc).__name__)
+        return error_response("文献记录保存失败", 500)
     if full_text:
-        background_tasks.add_task(_build_vector_store, paper.id, full_text)
+        background_tasks.add_task(_build_vector_store, paper.id, current_user.id, full_text)
     return success_response(serialize_paper(paper, detail=True))
 
 
@@ -149,9 +179,9 @@ def compare_papers(payload: ComparePapersRequest, db: Session = Depends(get_db),
         db.add(record)
         db.commit()
         db.refresh(record)
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        logger.exception("用户 %s 的论文对比结果保存失败", current_user.id)
+        logger.error("用户 %s 的论文对比结果保存失败（%s）", current_user.id, type(exc).__name__)
         return error_response("论文对比成功，但保存失败", 500)
     response_data["comparison_id"] = record.id
     return success_response(response_data)
@@ -198,6 +228,12 @@ def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: Use
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
     db.delete(paper); db.commit()
+    try:
+        from app.services.vector_store import delete_vector_store
+
+        delete_vector_store(paper_id)
+    except Exception as exc:
+        logger.error("论文 %s 的向量索引清理失败（%s）", paper_id, type(exc).__name__)
     return success_response({"paper_id": paper_id})
 
 
@@ -268,9 +304,9 @@ def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: U
         db.add(record)
         db.commit()
         db.refresh(record)
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        logger.exception("论文 %s 的总结保存失败", paper.id)
+        logger.error("论文 %s 的总结保存失败（%s）", paper.id, type(exc).__name__)
         return error_response("总结生成成功，但保存失败", 500)
     return success_response({
         "paper_id": paper.id,
@@ -309,7 +345,12 @@ def summary_history(paper_id: int, db: Session = Depends(get_db), current_user: 
 def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    result = safe_answer_question(payload.question, paper.full_text or "", paper_id=paper.id)
+    result = safe_answer_question(
+        payload.question,
+        paper.full_text or "",
+        paper_id=paper.id,
+        user_id=current_user.id,
+    )
     record = QARecord(
         user_id=current_user.id,
         paper_id=paper.id,
@@ -323,9 +364,9 @@ def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), c
         db.add(record)
         db.commit()
         db.refresh(record)
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        logger.exception("论文 %s 的问答记录保存失败", paper.id)
+        logger.error("论文 %s 的问答记录保存失败（%s）", paper.id, type(exc).__name__)
         return error_response("论文问答成功，但保存失败", 500)
     return success_response({**result, "qa_record_id": record.id})
 
