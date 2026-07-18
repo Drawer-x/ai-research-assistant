@@ -54,9 +54,9 @@
     <div class="papers-list" v-if="filteredPapers.length > 0">
       <div
         v-for="paper in filteredPapers"
-        :key="paper.id"
+        :key="paper.paper_id || paper.id"
         class="paper-item"
-        @click="goToDetail(paper.id)"
+        @click="goToDetail(paper.paper_id || paper.id)"
       >
         <div class="paper-icon">
           <span class="icon-emoji">📄</span>
@@ -157,19 +157,38 @@ const formatDate = (dateStr) => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+// ===== 跳转到论文详情（兼容 paper_id 和 id） =====
 const goToDetail = (id) => {
-  router.push(`/papers/${id}`)
+  console.log('🔍 [PapersView] goToDetail 被调用，收到的 id:', id, '，类型:', typeof id)
+  
+  if (!id) {
+    console.error('❌ 论文 ID 无效:', id)
+    ElMessage.error('论文 ID 无效，无法跳转')
+    return
+  }
+  
+  // 确保 ID 是字符串
+  const idStr = String(id)
+  console.log('📄 跳转到论文详情，ID:', idStr)
+  router.push(`/papers/${idStr}`)
 }
 
 const loadPapers = async () => {
   try {
     const res = await axios.get('/api/papers')
     if (res.data.code === 200 || res.data.code === 0) {
-      papers.value = res.data.data || []
+      const data = res.data.data || []
+      // 兼容处理：确保每个论文对象都有 id 字段（从 paper_id 映射）
+      papers.value = data.map(item => ({
+        ...item,
+        id: item.paper_id || item.id
+      }))
+      console.log('📚 加载的论文数据:', papers.value)
     } else {
       loadMockPapers()
     }
   } catch (error) {
+    console.warn('加载文献列表失败，使用 Mock 数据:', error)
     loadMockPapers()
   }
 }
@@ -178,6 +197,7 @@ const loadMockPapers = () => {
   papers.value = [
     {
       id: 1,
+      paper_id: 1,
       title: 'Attention Is All You Need',
       authors: 'Vaswani et al.',
       year: '2017',
@@ -187,6 +207,7 @@ const loadMockPapers = () => {
     },
     {
       id: 2,
+      paper_id: 2,
       title: 'BERT: Pre-training of Deep Bidirectional Transformers',
       authors: 'Devlin et al.',
       year: '2018',
@@ -196,6 +217,7 @@ const loadMockPapers = () => {
     },
     {
       id: 3,
+      paper_id: 3,
       title: 'GPT-3: Language Models are Few-Shot Learners',
       authors: 'Brown et al.',
       year: '2020',
@@ -204,6 +226,7 @@ const loadMockPapers = () => {
       created_at: '2026-07-12T09:15:00'
     }
   ]
+  console.log('📚 Mock 论文数据:', papers.value)
 }
 
 const onUploadSuccess = (response) => {

@@ -52,7 +52,6 @@
           :loading="summaryLoading"
           @click="generateSummary"
           :disabled="!paper"
-          :icon="summary ? 'Refresh' : 'Plus'"
         >
           {{ summaryLoading ? '生成中...' : summary ? '重新生成' : '生成总结' }}
         </el-button>
@@ -199,7 +198,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, User, Calendar, Loading, Edit } from '@element-plus/icons-vue'
@@ -207,9 +206,35 @@ import axios from '../utils/axios'
 
 const route = useRoute()
 const router = useRouter()
-const paperId = ref(route.params.id)
 
+// ============================================================
+// ===== 安全获取论文 ID（使用 computed） =====
+// ============================================================
+const paperId = computed(() => {
+  // 1. 优先从路由参数获取
+  if (route.params.id) {
+    console.log('✅ 从 route.params.id 获取 ID:', route.params.id)
+    return route.params.id
+  }
+  // 2. 从路径中解析数字 ID
+  const match = route.path.match(/\/papers\/(\d+)/)
+  if (match) {
+    console.log('✅ 从路径中解析 ID:', match[1])
+    return match[1]
+  }
+  // 3. 从 query 参数获取
+  if (route.query.id) {
+    console.log('✅ 从 route.query.id 获取 ID:', route.query.id)
+    return route.query.id
+  }
+  // 4. 都没有则报错
+  console.error('❌ 无法从路由中提取论文 ID，当前路由:', route.path, route.params)
+  return null
+})
+
+// ============================================================
 // ===== 状态 =====
+// ============================================================
 const pageLoading = ref(false)
 const paper = ref(null)
 const summary = ref(null)
@@ -219,7 +244,6 @@ const qaLoading = ref(false)
 const qaHistory = ref([])
 const qaHistoryRef = ref(null)
 
-// ===== 快捷问题 =====
 const quickQuestions = [
   '这篇论文主要解决了什么问题？',
   '用了什么方法和模型？',
@@ -228,66 +252,93 @@ const quickQuestions = [
   '有什么创新点？'
 ]
 
+// ============================================================
 // ===== 获取论文详情 =====
+// ============================================================
 const fetchPaperDetail = async () => {
-  if (!paperId.value) {
-    ElMessage.error('论文 ID 不存在')
+  const id = paperId.value
+  if (!id) {
+    ElMessage.error('论文 ID 不存在，请从文献列表重新进入')
     return
   }
+
+  console.log('📄 正在获取论文详情，ID:', id)
+
   pageLoading.value = true
   try {
-    const res = await axios.get(`/api/papers/${paperId.value}`)
+    const res = await axios.get(`/api/papers/${id}`)
+    console.log('📄 论文详情响应:', res.data)
+    
     if (res.data.code === 200 || res.data.code === 0) {
-      paper.value = res.data.data
+      const data = res.data.data
+      // 兼容 paper_id 和 id
+      paper.value = {
+        ...data,
+        id: data.paper_id || data.id
+      }
     } else {
       ElMessage.error(res.data.message || '获取论文详情失败')
     }
   } catch (error) {
     console.error('获取论文详情失败:', error)
-    ElMessage.error(error.response?.data?.message || '获取论文详情失败')
+    ElMessage.error(error.response?.data?.message || '获取论文详情失败，请检查网络')
   } finally {
     pageLoading.value = false
   }
 }
 
+// ============================================================
 // ===== AI 总结 =====
+// ============================================================
 const generateSummary = async () => {
+  const id = paperId.value
   if (!paper.value) {
     ElMessage.warning('请先加载论文')
     return
   }
+
   summaryLoading.value = true
   try {
-    const res = await axios.post(`/api/papers/${paperId.value}/summary`)
+    const res = await axios.post(`/api/papers/${id}/summary`)
+    console.log('📄 AI 总结响应:', res.data)
+    
     if (res.data.code === 200 || res.data.code === 0) {
       summary.value = res.data.data
       ElMessage.success('AI 总结生成成功！')
     } else {
       ElMessage.error(res.data.message || '生成总结失败')
+      loadMockSummary()
     }
   } catch (error) {
     console.error('生成总结失败:', error)
-    // 使用 Mock 数据兜底
-    summary.value = {
-      background: '近年来，深度学习在自然语言处理领域取得了显著进展，但传统的序列建模方法仍面临并行计算效率低和长距离依赖捕捉困难的问题。',
-      problem: '如何设计一种能够高效并行计算且能有效捕捉长距离依赖的序列建模架构？',
-      method: '提出了 Transformer 架构，核心是自注意力机制（Self-Attention）和多头注意力（Multi-Head Attention），完全摒弃了 RNN 和 CNN。',
-      conclusion: '在 WMT 2014 英德翻译任务上达到 28.4 BLEU，比之前最好的结果提高了 2 BLEU 以上，且训练速度大幅提升。',
-      innovation: '1) 首次提出完全基于注意力的序列模型；2) 多头注意力机制捕捉不同子空间的特征；3) 为后续 BERT、GPT 等大模型奠定了基础。',
-      limitation: '计算复杂度随序列长度平方增长，在处理超长序列时内存消耗大；模型的可解释性仍有待提高。'
-    }
+    loadMockSummary()
     ElMessage.warning('使用示例数据展示总结效果')
   } finally {
     summaryLoading.value = false
   }
 }
 
+const loadMockSummary = () => {
+  summary.value = {
+    background: '近年来，深度学习在自然语言处理领域取得了显著进展，但传统的序列建模方法仍面临并行计算效率低和长距离依赖捕捉困难的问题。',
+    problem: '如何设计一种能够高效并行计算且能有效捕捉长距离依赖的序列建模架构？',
+    method: '提出了 Transformer 架构，核心是自注意力机制（Self-Attention）和多头注意力（Multi-Head Attention），完全摒弃了 RNN 和 CNN。',
+    conclusion: '在 WMT 2014 英德翻译任务上达到 28.4 BLEU，比之前最好的结果提高了 2 BLEU 以上，且训练速度大幅提升。',
+    innovation: '1) 首次提出完全基于注意力的序列模型；2) 多头注意力机制捕捉不同子空间的特征；3) 为后续 BERT、GPT 等大模型奠定了基础。',
+    limitation: '计算复杂度随序列长度平方增长，在处理超长序列时内存消耗大；模型的可解释性仍有待提高。'
+  }
+}
+
+// ============================================================
 // ===== AI 问答 =====
+// ============================================================
 const askQuestion = async () => {
+  const id = paperId.value
   if (!paper.value) {
     ElMessage.warning('请先加载论文')
     return
   }
+
   const q = question.value.trim()
   if (!q) {
     ElMessage.warning('请输入问题')
@@ -296,7 +347,9 @@ const askQuestion = async () => {
 
   qaLoading.value = true
   try {
-    const res = await axios.post(`/api/papers/${paperId.value}/qa`, { question: q })
+    const res = await axios.post(`/api/papers/${id}/qa`, { question: q })
+    console.log('📄 问答响应:', res.data)
+    
     if (res.data.code === 200 || res.data.code === 0) {
       qaHistory.value.push({
         question: q,
@@ -307,44 +360,47 @@ const askQuestion = async () => {
       scrollToBottom()
     } else {
       ElMessage.error(res.data.message || '问答失败')
+      addMockAnswer(q)
     }
   } catch (error) {
     console.error('问答失败:', error)
-    // 使用 Mock 回答兜底
-    const mockAnswers = [
-      '根据论文内容，该研究主要关注序列建模与机器翻译任务，提出了基于自注意力机制的 Transformer 架构。',
-      '论文使用了 WMT 2014 英德翻译数据集（约 450 万对句子）和英法翻译数据集（约 3600 万对句子）。',
-      '主要的创新点包括：1) 完全基于注意力的架构；2) 多头注意力机制；3) 位置编码处理序列顺序。',
-      '实验结果表明，Transformer 在 WMT 2014 英德翻译上达到 28.4 BLEU，训练时间相比传统序列模型大幅减少。',
-      '该架构为 BERT、GPT 等后续大模型奠定了基础，是自然语言处理领域的重要突破。'
-    ]
-    qaHistory.value.push({
-      question: q,
-      answer: mockAnswers[qaHistory.value.length % mockAnswers.length]
-    })
-    question.value = ''
-    await nextTick()
-    scrollToBottom()
+    addMockAnswer(q)
     ElMessage.warning('使用示例回答展示效果')
   } finally {
     qaLoading.value = false
   }
 }
 
-// ===== 滚动到底部 =====
+const addMockAnswer = (q) => {
+  const mockAnswers = [
+    '根据论文内容，该研究主要关注序列建模与机器翻译任务，提出了基于自注意力机制的 Transformer 架构。',
+    '论文使用了 WMT 2014 英德翻译数据集（约 450 万对句子）和英法翻译数据集（约 3600 万对句子）。',
+    '主要的创新点包括：1) 完全基于注意力的架构；2) 多头注意力机制；3) 位置编码处理序列顺序。',
+    '实验结果表明，Transformer 在 WMT 2014 英德翻译上达到 28.4 BLEU，训练时间相比传统序列模型大幅减少。',
+    '该架构为 BERT、GPT 等后续大模型奠定了基础，是自然语言处理领域的重要突破。'
+  ]
+  
+  qaHistory.value.push({
+    question: q,
+    answer: mockAnswers[qaHistory.value.length % mockAnswers.length]
+  })
+  question.value = ''
+  setTimeout(() => {
+    scrollToBottom()
+  }, 100)
+}
+
 const scrollToBottom = () => {
   if (qaHistoryRef.value) {
     qaHistoryRef.value.scrollTop = qaHistoryRef.value.scrollHeight
   }
 }
 
-// ===== 辅助函数 =====
 const getStatusType = (status) => {
   const map = { '已读': 'success', '在读': 'warning', '未读': 'info' }
   return map[status] || 'info'
 }
 
-// ===== 生命周期 =====
 onMounted(() => {
   fetchPaperDetail()
 })
