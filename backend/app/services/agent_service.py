@@ -1,10 +1,15 @@
 """Generate validated research plans with a deterministic local fallback."""
 
+import logging
+import time
 from typing import Any
 
+from app.core.config import settings
 from app.services.ai_errors import AIErrorReason, AIServiceError
 from .llm_client import chat_with_deepseek
 from .structured_output import StructuredOutputError, parse_json_object
+
+logger = logging.getLogger(__name__)
 
 
 def _mock_plan(topic: str, duration_weeks: int) -> dict:
@@ -75,8 +80,12 @@ def generate_research_plan(topic: str, level: str, duration_weeks: int) -> dict:
         raise ValueError("duration_weeks 必须在 1 到 52 之间")
     prompt = f'''用户研究方向：{topic}\n研究水平：{level}\n周期：{duration_weeks}周
 请仅返回 JSON。stages 每项必须包含 name、tasks、output；weekly_plan 必须覆盖第 1 到 {duration_weeks} 周且每项包含 week、goal、tasks；risks 为非空字符串数组。'''
+    started = time.monotonic()
+    logger.info("进入真实 Agent service（API key configured=%s）", bool(settings.ecnu_api_key))
     try:
         plan = _validate_plan(parse_json_object(chat_with_deepseek(prompt)), duration_weeks)
+        logger.info("Agent service 成功（elapsed_ms=%d）", int((time.monotonic() - started) * 1000))
         return {"topic": topic, **plan, "is_mock": False}
-    except AIServiceError:
+    except AIServiceError as exc:
+        logger.warning("Agent service 使用 fallback（reason=%s, elapsed_ms=%d）", exc.reason.value, int((time.monotonic() - started) * 1000))
         return _mock_plan(topic, duration_weeks)

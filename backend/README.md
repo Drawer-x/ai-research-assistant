@@ -86,3 +86,24 @@ python scripts/test_ecnu_business_flow.py --live
 ```
 
 脚本只输出配置状态、`is_mock`、字段名、文本字符数和安全错误摘要。QA 优先使用用户论文的向量检索；索引或 embedding 暂不可用但论文正文非空时，会改用受限正文片段调用 ChatECNU，避免把可用真实模型错误降级为 Mock。
+
+## Sprint 3 Graph 与 Agent
+
+新增关系生成 `POST /api/graph/generate`、关系列表 `GET /api/graph/relations`，并保留 `GET /api/graph/papers`。生成结果写入既有 `paper_relations`；关系两端统一为较小 ID 到较大 ID，相同端点和类型不会重复保存。`is_mock` 与 description 编码在既有 `relation_reason` JSON 中，兼容旧纯文本记录，无需修改旧 SQLite 表。
+
+Agent 保留 `POST /api/agent/research-plan`，同时兼容 Sprint 1 的 `topic/level` 和 Sprint 3 的 `research_topic/current_level/research_goal/paper_ids`。新增：
+
+- `GET /api/agent/research-plans`
+- `GET /api/agent/research-plans/{plan_id}`
+
+计划完整结构写入既有 `research_plans.plan_content` JSON。所有接口要求 JWT，并验证论文、关系和计划归属。
+
+Sprint 3 冒烟测试：
+
+```bash
+python scripts/sprint3_smoke_test.py
+python scripts/sprint3_smoke_test.py --base-url http://127.0.0.1:8767
+python scripts/sprint3_smoke_test.py --base-url http://127.0.0.1:8769 --request-timeout 120
+```
+
+脚本默认读取统一配置，将 read timeout 设为 `max(120, ECNU_API_TIMEOUT_SECONDS + 30)`，连接超时为 10 秒。真实 Agent 调用使用 `(10, ECNU_API_TIMEOUT_SECONDS)` 的连接/读取超时；模型超时、连接失败或返回非法时，后端会在有界等待后保存并返回完整 fallback 计划。
