@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+def _log_fallback(operation: str, exc: Exception) -> None:
+    reason = getattr(exc, "reason", None)
+    safe_reason = getattr(reason, "value", None) or type(exc).__name__
+    logger.warning("%s 使用 fallback（%s）", operation, safe_reason)
 
 
 SUMMARY_FIELDS = (
@@ -55,16 +64,19 @@ def safe_generate_summary(paper_text: str) -> dict:
                 if isinstance(nested, dict):
                     summary = nested
                     break
-        if not isinstance(summary, dict) or any(
-            not isinstance(summary.get(field), str) or not summary[field].strip()
-            for field in SUMMARY_FIELDS
-        ):
+        if not isinstance(summary, dict):
             return fallback
         if not isinstance(is_mock, bool) or not isinstance(model_name, str) or not model_name.strip():
             return fallback
-        normalized = {field: summary[field].strip() for field in SUMMARY_FIELDS}
+        normalized = {
+            field: summary.get(field, "").strip() if isinstance(summary.get(field, ""), str) else ""
+            for field in SUMMARY_FIELDS
+        }
+        if not any(normalized.values()):
+            return fallback
         return {"summary": normalized, "is_mock": is_mock, "model_name": model_name.strip()}
-    except Exception:
+    except Exception as exc:
+        _log_fallback("论文总结", exc)
         return fallback
 
 
@@ -124,7 +136,8 @@ def safe_answer_question(
             "is_mock": not is_real,
             "failure_reason": failure_reason,
         }
-    except Exception:
+    except Exception as exc:
+        _log_fallback("论文问答", exc)
         return fallback
 
 
@@ -171,11 +184,12 @@ def safe_compare_papers(papers: list[dict], compare_dimensions: list[str]) -> di
                 return fallback
             for dimension in compare_dimensions:
                 value = row.get(dimension)
-                if not isinstance(value, str) or not value.strip():
-                    return fallback
-                normalized_row[dimension] = value.strip()
+                normalized_row[dimension] = value.strip() if isinstance(value, str) else ""
+            if not any(normalized_row[dimension] for dimension in compare_dimensions):
+                return fallback
             normalized_table.append(normalized_row)
         is_mock = result.get("is_mock") is not False
         return {"comparison_table": normalized_table, "summary": summary.strip(), "is_mock": is_mock}
-    except Exception:
+    except Exception as exc:
+        _log_fallback("多论文对比", exc)
         return fallback

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.services.ai_errors import AIErrorReason, AIServiceError
 from app.services.llm_client import chat_with_deepseek
-from app.services.structured_output import StructuredOutputError, parse_json_object
+from app.services.structured_output import StructuredOutputError, parse_json_object, unwrap_model_object
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_inputs(papers: list[dict], compare_dimensions: list[str]) -> None:
@@ -88,13 +91,14 @@ def _validated_result(
         }
         for dimension in compare_dimensions:
             value = row.get(dimension)
-            if not isinstance(value, str) or not value.strip():
-                raise StructuredOutputError(
-                    AIErrorReason.MALFORMED_RESPONSE,
-                    f"comparison_table 缺少有效维度：{dimension}",
-                )
-            normalized_row[dimension] = value.strip()
+            normalized_row[dimension] = value.strip() if isinstance(value, str) else ""
         normalized.append(normalized_row)
+    if not any(
+        row.get(dimension)
+        for row in normalized
+        for dimension in compare_dimensions
+    ):
+        raise StructuredOutputError(AIErrorReason.MALFORMED_RESPONSE, "comparison_table 不包含有效对比内容")
     return {"comparison_table": normalized, "summary": summary.strip(), "is_mock": False}
 
 
@@ -131,9 +135,10 @@ comparison_table 必须为每个 paper_id 返回且仅返回一行，并包含�
 </papers>"""
     try:
         return _validated_result(
-            parse_json_object(chat_with_deepseek(prompt)),
+            unwrap_model_object(parse_json_object(chat_with_deepseek(prompt))),
             papers,
             compare_dimensions,
         )
-    except AIServiceError:
+    except AIServiceError as exc:
+        logger.warning("多论文对比使用 fallback（reason=%s, papers=%s）", exc.reason.value, len(papers))
         return fallback

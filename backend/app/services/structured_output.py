@@ -75,3 +75,17 @@ def require_string_fields(data: dict[str, Any], fields: Iterable[str]) -> dict[s
             )
         output[field] = value.strip()
     return output
+
+
+def unwrap_model_object(data: dict[str, Any]) -> dict[str, Any]:
+    """Unwrap repeated summary/content/data envelopes without accepting text as JSON."""
+    current = data
+    for _ in range(6):
+        nested = next(
+            (current.get(key) for key in ("summary", "content", "data") if isinstance(current.get(key), dict)),
+            None,
+        )
+        if nested is None:
+            break
+        current = nested
+    return current

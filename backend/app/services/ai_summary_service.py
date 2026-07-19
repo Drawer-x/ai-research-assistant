@@ -1,20 +1,38 @@
 """Generate a structured paper summary with a deterministic local fallback."""
 
 import re
+import logging
 
 from app.core.config import settings
 from app.services.ai_errors import AIServiceError
 from app.services.llm_client import chat_with_deepseek
-from app.services.structured_output import parse_json_object, require_string_fields
+from app.services.structured_output import parse_json_object, unwrap_model_object
 
 
 SUMMARY_FIELDS = (
     "background", "problem", "method", "experiment", "result", "innovation", "limitation",
 )
+logger = logging.getLogger(__name__)
 
 
 def _extract_json(text: str) -> dict[str, str]:
-    return require_string_fields(parse_json_object(text), SUMMARY_FIELDS)
+    data = unwrap_model_object(parse_json_object(text))
+    aliases = {
+        "background": ("background", "research_background", "背景"),
+        "problem": ("problem", "research_problem", "问题"),
+        "method": ("method", "methods", "methodology", "方法"),
+        "experiment": ("experiment", "experiments", "experimental_setup", "实验"),
+        "result": ("result", "results", "conclusion", "结论"),
+        "innovation": ("innovation", "contribution", "contributions", "创新"),
+        "limitation": ("limitation", "limitations", "局限"),
+    }
+    normalized: dict[str, str] = {}
+    for field, names in aliases.items():
+        value = next((data.get(name) for name in names if isinstance(data.get(name), str)), "")
+        normalized[field] = value.strip()
+    if not any(normalized.values()):
+        raise ValueError("总结 JSON 不包含有效业务字段")
+    return normalized
 
 
 def _local_fallback(paper_text: str) -> dict:
@@ -50,8 +68,9 @@ def generate_paper_summary_result(paper_text: str) -> tuple[dict, bool, str]:
 </paper_content>
 """.strip()
     try:
-        return _extract_json(chat_with_deepseek(prompt)), False, settings.ecnu_chat_model
-    except (AIServiceError, ValueError, TypeError):
+        return _extract_json(chat_with_deepseek(prompt)), False, settings.ecnu_model
+    except (AIServiceError, ValueError, TypeError) as exc:
+        logger.warning("论文总结使用 fallback（reason=%s, paper_chars=%s）", type(exc).__name__, len(paper_text))
         return _local_fallback(paper_text), True, "local-fallback"
 
 
