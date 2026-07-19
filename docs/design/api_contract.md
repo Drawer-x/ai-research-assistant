@@ -63,6 +63,10 @@ Content-Type: application/json
 | GET | `/api/papers/{paper_id}/qa-records` | 是 | 查询当前用户论文的问答历史 |
 | POST | `/api/papers/compare` | 是 | 对比至少两篇当前用户的论文 |
 | GET | `/api/papers/comparisons` | 是 | 查询当前用户的对比历史 |
+| POST | `/api/graph/generate` | 是 | 为当前用户至少两篇论文生成并保存关系 |
+| GET | `/api/graph/relations` | 是 | 查询当前用户论文之间的关系 |
+| GET | `/api/agent/research-plans` | 是 | 查询当前用户计划历史 |
+| GET | `/api/agent/research-plans/{plan_id}` | 是 | 查询当前用户单条计划 |
 
 ## 请求与返回示例
 
@@ -199,3 +203,41 @@ GET /api/papers/comparisons
 ```
 
 返回当前用户的 `paper_ids`、对比维度、完整结果、`is_mock` 和创建时间，不返回其他用户数据。成员 B 后续只需提供 `app.services.compare_service.compare_papers(papers, compare_dimensions)`，无需修改 API 路径。
+
+## Sprint 3 关系图
+
+```http
+POST /api/graph/generate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"paper_ids":[1,2,3],"relation_types":["citation","topic_similarity","method_similarity"],"force_regenerate":false}
+```
+
+`paper_ids` 为空时使用当前用户全部论文。返回 `nodes`、`edges`、`is_mock` 和 `generated_count`。节点包含 `paper_id/title/authors/year/venue/read_status`；边包含 `id/source/target/relation_type/weight/description/is_mock`。查询使用 `GET /api/graph/papers`，只查边使用 `GET /api/graph/relations`。两端论文必须属于当前用户。
+
+成员 B 可提供以下任一名称，adapter 会优先检测：`generate_paper_relations`、`build_paper_relations`、`generate_literature_graph`。推荐契约：
+
+```python
+generate_paper_relations(papers: list[dict], relation_types: list[str]) -> dict
+```
+
+返回 `{"relations":[{"source":1,"target":2,"relation_type":"topic_similarity","weight":0.8,"description":"...","is_mock":false}],"is_mock":false}`。函数缺失、异常或结构非法时使用确定性 fallback。
+
+## Sprint 3 Agent
+
+旧请求仍有效：`{"topic":"RAG","level":"beginner","duration_weeks":4}`。新请求：
+
+```json
+{"research_topic":"RAG","research_goal":"完成原型","duration_weeks":8,"current_level":"undergraduate","paper_ids":[1,2]}
+```
+
+生成响应包含 `plan_id/research_topic/research_goal/duration_weeks/current_level/reading_route/stages/weekly_plan/tasks/risks/recommended_papers/is_mock/created_at`。历史按 `created_at DESC, id DESC` 返回；详情和历史均只允许计划所有者访问。
+
+成员 B 推荐实现：
+
+```python
+generate_research_plan(research_topic: str, research_goal: str, duration_weeks: int, current_level: str | None = None, papers: list[dict] | None = None) -> dict
+```
+
+Adapter 同时兼容当前 Sprint 1 实际签名 `generate_research_plan(topic, level, duration_weeks)`，并兼容名称 `create_research_plan`、`generate_agent_plan`。真实 service 缺失、异常或完全非法时，返回按周数生成的稳定 fallback，`is_mock=true`。
