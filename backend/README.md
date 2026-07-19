@@ -1,6 +1,6 @@
 # AI 科研文献分析平台后端
 
-Sprint 1 后端基于 FastAPI、SQLAlchemy 和 SQLite。配置 `ECNU_API_KEY` 时可调用成员 B 的 AI/RAG service；未配置、调用失败或向量库不可用时自动降级为 mock，接口结构保持不变。
+后端基于 FastAPI、SQLAlchemy 和 SQLite。Sprint 2 的 adapter 接入成员 B 的 `generate_paper_summary_result`、`answer_question_about_paper` 和 `compare_papers`；配置 `ECNU_API_KEY` 时可调用 ECNU OpenAI-compatible 服务，未配置、调用失败、返回非法或 RAG 向量库不可用时自动降级为稳定 fallback，接口仍返回 `code/message/data`。
 
 ## 启动
 
@@ -44,3 +44,11 @@ python scripts/sprint2_smoke_test.py --base-url http://127.0.0.1:8767
 ```
 
 脚本会自动注册唯一用户、上传两份临时 PDF，并验证总结/问答落库、多论文对比和历史查询。测试不依赖真实 AI；未配置 `ECNU_API_KEY` 时使用 fallback。
+
+运行全部后端自动化测试（需从 `backend` 目录执行）：
+
+```bash
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+AI 相关环境变量统一由 `app/core/config.py` 读取：`ECNU_API_KEY`、`ECNU_BASE_URL`、`ECNU_CHAT_MODEL`、`ECNU_EMBEDDING_MODEL`、`AI_TIMEOUT_SECONDS` 和 `AI_MAX_PROMPT_CHARS`。请复制 `.env.example` 后填写自己的值，不要提交 `.env`。

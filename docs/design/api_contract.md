@@ -1,6 +1,6 @@
 # Sprint 1–2 后端 API 契约
 
-本文档定义 AI 驱动科研文献分析平台 Sprint 1 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答和 Agent 科研规划可调用成员 B 的 service；未配置 `ECNU_API_KEY`、远端调用失败或 RAG 数据不可用时自动降级为 mock。关系图边仅使用数据库已有关系。
+本文档定义 AI 驱动科研文献分析平台 Sprint 1/2 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答、多论文对比和 Agent 科研规划可调用成员 B 的 service；未配置 `ECNU_API_KEY`、远端调用失败、结构化返回非法或 RAG 数据不可用时自动降级为稳定 fallback。关系图边仅使用数据库已有关系。
 
 ## 统一响应
 
@@ -55,7 +55,7 @@ Content-Type: application/json
 | GET | `/api/tags` | 是 | 标签列表 |
 | POST | `/api/papers/{paper_id}/tags` | 是 | 添加或自动创建标签 |
 | DELETE | `/api/papers/{paper_id}/tags/{tag_id}` | 是 | 移除论文标签 |
-| POST | `/api/papers/{paper_id}/summary` | 是 | 生成并保存 mock 总结 |
+| POST | `/api/papers/{paper_id}/summary` | 是 | 生成并保存结构化总结（AI 或 fallback） |
 | POST | `/api/papers/{paper_id}/qa` | 是 | mock 论文问答 |
 | GET | `/api/graph/papers` | 是 | ECharts Graph 节点和关系边 |
 | POST | `/api/agent/research-plan` | 是 | 生成并保存 mock 科研规划 |
@@ -136,7 +136,7 @@ AI 总结响应的 `data`：
 
 ## AI 与 Mock 降级边界
 
-- `generate_paper_summary` 优先调用可用的 AI service，失败时返回固定结构化占位内容；两种结果都会写入 `ai_summaries` 并通过 `is_mock` 区分。
+- adapter 优先调用 `generate_paper_summary_result`，兼容嵌套 `summary/content/data` 后规范化七个字段；失败时返回固定结构化占位内容。两种结果都会写入 `ai_summaries` 并通过 `is_mock` 区分。
 - `answer_question_about_paper` 优先使用向量检索与 AI 回答；缺少 Key、索引或依赖异常时返回固定回答和空证据。
 - 关系图节点来自数据库；关系边仅来自已有 `paper_relations`，Sprint 1 不自动推断关系。
 - `generate_research_plan` 优先调用 AI service，失败时按周数生成占位计划，并写入 `research_plans`。
@@ -144,7 +144,7 @@ AI 总结响应的 `data`：
 
 ## Sprint 2 AI 结果与对比
 
-以上接口均需要 `Authorization: Bearer <token>`，且仅允许访问当前用户的论文和 AI 结果。API 层通过 `ai_adapter_service` 调用成员 B 的 service；函数缺失、异常或返回结构无效时使用稳定 fallback。
+以上接口均需要 `Authorization: Bearer <token>`，且仅允许访问当前用户的论文和 AI 结果。API 层通过 `ai_adapter_service` 调用成员 B 的 `generate_paper_summary_result`、`answer_question_about_paper` 和 `compare_papers`；函数缺失、异常或返回结构无效时使用稳定 fallback。QA 的字符串、字典或列表 evidence 会规范化为字符串列表。
 
 总结历史：
 
