@@ -47,8 +47,14 @@ def safe_generate_summary(paper_text: str) -> dict:
         else:
             generator = getattr(module, "generate_paper_summary")
             summary = generator(paper_text)
-            is_mock = bool(summary.pop("is_mock", True))
+            is_mock = bool(summary.get("is_mock", True)) if isinstance(summary, dict) else True
             model_name = "fallback-mock" if is_mock else "ai-service"
+        if isinstance(summary, dict):
+            for wrapper in ("summary", "content", "data"):
+                nested = summary.get(wrapper)
+                if isinstance(nested, dict):
+                    summary = nested
+                    break
         if not isinstance(summary, dict) or any(
             not isinstance(summary.get(field), str) or not summary[field].strip()
             for field in SUMMARY_FIELDS
@@ -98,10 +104,13 @@ def safe_answer_question(
         ):
             return fallback
         evidence = result.get("evidence", [])
-        if not isinstance(evidence, list) or any(
-            not isinstance(item, str) or not item.strip() for item in evidence
-        ):
+        if isinstance(evidence, str):
+            evidence = [evidence] if evidence.strip() else []
+        elif isinstance(evidence, dict):
+            evidence = [str(value) for value in evidence.values() if str(value).strip()]
+        elif not isinstance(evidence, list):
             evidence = []
+        evidence = [str(item).strip() for item in evidence if str(item).strip()]
         is_real = result.get("is_mock") is False and bool(evidence)
         failure_reason = result.get("failure_reason")
         if is_real:
@@ -148,7 +157,6 @@ def safe_compare_papers(papers: list[dict], compare_dimensions: list[str]) -> di
             or len(table) != len(expected_ids)
             or not isinstance(summary, str)
             or not summary.strip()
-            or result.get("is_mock") is not False
         ):
             return fallback
         normalized_table: list[dict[str, Any]] = []
@@ -167,6 +175,7 @@ def safe_compare_papers(papers: list[dict], compare_dimensions: list[str]) -> di
                     return fallback
                 normalized_row[dimension] = value.strip()
             normalized_table.append(normalized_row)
-        return {"comparison_table": normalized_table, "summary": summary.strip(), "is_mock": False}
+        is_mock = result.get("is_mock") is not False
+        return {"comparison_table": normalized_table, "summary": summary.strip(), "is_mock": is_mock}
     except Exception:
         return fallback

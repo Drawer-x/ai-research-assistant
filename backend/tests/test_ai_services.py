@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from app.schemas.agent import ResearchPlanRequest
 from app.schemas.ai import ComparePapersRequest, QARequest
 from app.services.agent_service import generate_research_plan
-from app.services.ai_adapter_service import safe_answer_question, safe_generate_summary
+from app.services.ai_adapter_service import safe_answer_question, safe_compare_papers, safe_generate_summary
 from app.services.ai_errors import AIErrorReason
 from app.services.ai_summary_service import SUMMARY_FIELDS, generate_paper_summary_result
 from app.services.compare_service import compare_papers
@@ -157,6 +157,11 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["summary"], valid_summary())
         json.dumps(result)
 
+    @patch("app.services.ai_summary_service.generate_paper_summary_result")
+    def test_summary_adapter_normalizes_nested_summary(self, generate):
+        generate.return_value = ({"summary": valid_summary()}, False, "validated-model")
+        self.assertEqual(safe_generate_summary("paper")["summary"], valid_summary())
+
     @patch("app.services.qa_service.answer_question_about_paper")
     def test_qa_adapter_does_not_mark_unverifiable_result_real(self, answer):
         answer.return_value = {"answer": "answer", "evidence": [], "is_mock": False}
@@ -175,6 +180,28 @@ class AdapterTests(unittest.TestCase):
         result = safe_answer_question("question", "paper", 1, 2)
         self.assertFalse(result["is_mock"])
         self.assertIsNone(result["failure_reason"])
+
+    @patch("app.services.qa_service.answer_question_about_paper")
+    def test_qa_adapter_normalizes_non_list_evidence(self, answer):
+        answer.return_value = {"answer": "supported", "evidence": "source", "is_mock": False}
+        result = safe_answer_question("question", "paper", 1, 2)
+        self.assertEqual(result["evidence"], ["source"])
+        self.assertFalse(result["is_mock"])
+
+    @patch("app.services.compare_service.compare_papers")
+    def test_compare_adapter_preserves_service_fallback(self, compare):
+        papers = [{"paper_id": 1, "title": "A"}, {"paper_id": 2, "title": "B"}]
+        compare.return_value = {
+            "comparison_table": [
+                {"paper_id": 1, "title": "A", "method": "unavailable"},
+                {"paper_id": 2, "title": "B", "method": "unavailable"},
+            ],
+            "summary": "service fallback",
+            "is_mock": True,
+        }
+        result = safe_compare_papers(papers, ["method"])
+        self.assertEqual(result["summary"], "service fallback")
+        self.assertTrue(result["is_mock"])
 
 
 class CompareServiceTests(unittest.TestCase):
