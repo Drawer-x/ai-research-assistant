@@ -1,7 +1,6 @@
 import json
 import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
@@ -49,51 +48,68 @@ class StructuredOutputTests(unittest.TestCase):
 
 
 class LLMClientTests(unittest.TestCase):
-    def tearDown(self):
-        llm_client._get_client.cache_clear()
-
     def test_missing_key_has_typed_reason(self):
-        llm_client._get_client.cache_clear()
         with patch.object(llm_client.settings, "ecnu_api_key", None):
             with self.assertRaises(LLMServiceError) as caught:
-                llm_client._get_client()
+                llm_client.chat_completion([{"role": "user", "content": "test"}])
         self.assertEqual(caught.exception.reason, AIErrorReason.MISSING_CONFIGURATION)
 
-    def test_missing_dependency_has_typed_reason(self):
-        real_import = __import__
+    def _response(self, payload=None, *, status=200, json_error=None):
+        response = Mock(ok=status < 400, status_code=status)
+        response.json.side_effect = json_error
+        if json_error is None:
+            response.json.return_value = payload
+        return response
 
-        def import_without_openai(name, *args, **kwargs):
-            if name == "openai":
-                raise ImportError("not installed")
-            return real_import(name, *args, **kwargs)
+    @patch("app.services.llm_client.requests.post")
+    def test_standard_choices_response_and_request_contract(self, post):
+        post.return_value = self._response({"choices": [{"message": {"content": " connected "}}]})
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
+            result = llm_client.chat_completion([{"role": "user", "content": "test"}])
+        self.assertEqual(result, "connected")
+        kwargs = post.call_args.kwargs
+        self.assertFalse(kwargs["json"]["stream"])
+        self.assertEqual(kwargs["json"]["model"], llm_client.settings.ecnu_model)
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer configured")
 
-        llm_client._get_client.cache_clear()
-        with (
-            patch.object(llm_client.settings, "ecnu_api_key", "configured"),
-            patch("builtins.__import__", side_effect=import_without_openai),
-        ):
+    @patch("app.services.llm_client.requests.post")
+    def test_nested_data_choices_response(self, post):
+        post.return_value = self._response({"data": {"choices": [{"message": {"content": "nested"}}]}})
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
+            self.assertEqual(llm_client.chat_completion([{"role": "user", "content": "test"}]), "nested")
+
+    @patch("app.services.llm_client.requests.post")
+    def test_http_error_is_sanitized(self, post):
+        post.return_value = self._response(status=503)
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
             with self.assertRaises(LLMServiceError) as caught:
-                llm_client._get_client()
-        self.assertEqual(caught.exception.reason, AIErrorReason.DEPENDENCY_MISSING)
+                llm_client.chat_completion([{"role": "user", "content": "secret prompt"}])
+        self.assertEqual(caught.exception.reason, AIErrorReason.PROVIDER_ERROR)
+        self.assertNotIn("secret", str(caught.exception))
 
-    @patch("app.services.llm_client._get_client")
-    def test_timeout_is_mapped_without_provider_details(self, get_client):
-        create = get_client.return_value.chat.completions.create
-        create.side_effect = TimeoutError("secret provider detail")
-        with self.assertRaises(LLMServiceError) as caught:
-            llm_client.chat_with_deepseek("prompt")
+    @patch("app.services.llm_client.requests.post", side_effect=llm_client.requests.Timeout("secret"))
+    def test_timeout_is_sanitized(self, _post):
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
+            with self.assertRaises(LLMServiceError) as caught:
+                llm_client.chat_completion([{"role": "user", "content": "test"}])
         self.assertEqual(caught.exception.reason, AIErrorReason.TIMEOUT)
-        self.assertNotIn("secret provider detail", str(caught.exception))
+        self.assertNotIn("secret", str(caught.exception))
 
-    @patch("app.services.llm_client._get_client")
-    def test_empty_model_response_has_typed_reason(self, get_client):
-        response = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="   "))]
-        )
-        get_client.return_value.chat.completions.create.return_value = response
-        with self.assertRaises(LLMServiceError) as caught:
-            llm_client.chat_with_deepseek("prompt")
-        self.assertEqual(caught.exception.reason, AIErrorReason.EMPTY_RESPONSE)
+    @patch("app.services.llm_client.requests.post")
+    def test_non_json_response_is_rejected(self, post):
+        post.return_value = self._response(json_error=ValueError("raw body"))
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
+            with self.assertRaises(LLMServiceError) as caught:
+                llm_client.chat_completion([{"role": "user", "content": "test"}])
+        self.assertEqual(caught.exception.reason, AIErrorReason.MALFORMED_RESPONSE)
+
+    @patch("app.services.llm_client.requests.post")
+    def test_missing_content_is_rejected(self, post):
+        post.return_value = self._response({"choices": []})
+        with patch.object(llm_client.settings, "ecnu_api_key", "configured"):
+            with self.assertRaises(LLMServiceError) as caught:
+                llm_client.chat_completion([{"role": "user", "content": "test"}])
+        self.assertEqual(caught.exception.reason, AIErrorReason.MALFORMED_RESPONSE)
 
 
 class SummaryServiceTests(unittest.TestCase):
@@ -105,6 +121,13 @@ class SummaryServiceTests(unittest.TestCase):
         self.assertFalse(is_mock)
         self.assertTrue(model_name)
 
+    @patch("app.services.ai_summary_service.chat_with_deepseek")
+    def test_fenced_structured_summary_is_real(self, chat):
+        chat.return_value = f"```json\n{json.dumps(valid_summary())}\n```"
+        summary, is_mock, _ = generate_paper_summary_result("paper body")
+        self.assertEqual(summary, valid_summary())
+        self.assertFalse(is_mock)
+
     @patch("app.services.ai_summary_service.chat_with_deepseek", return_value="not json")
     def test_malformed_json_uses_complete_fallback(self, _chat):
         summary, is_mock, model_name = generate_paper_summary_result("paper body")
@@ -114,12 +137,21 @@ class SummaryServiceTests(unittest.TestCase):
         self.assertEqual(model_name, "local-fallback")
 
     @patch("app.services.ai_summary_service.chat_with_deepseek")
-    def test_missing_field_is_not_marked_real(self, chat):
+    def test_missing_noncritical_field_is_normalized_as_real(self, chat):
         incomplete = valid_summary()
         incomplete.pop("limitation")
         chat.return_value = json.dumps(incomplete)
-        _, is_mock, _ = generate_paper_summary_result("paper body")
-        self.assertTrue(is_mock)
+        summary, is_mock, _ = generate_paper_summary_result("paper body")
+        self.assertFalse(is_mock)
+        self.assertEqual(summary["limitation"], "")
+
+    @patch("app.services.ai_summary_service.chat_with_deepseek")
+    def test_nested_summary_envelopes_are_normalized(self, chat):
+        chat.return_value = json.dumps({"data": {"content": {"summary": {"method": "nested method"}}}})
+        summary, is_mock, _ = generate_paper_summary_result("paper body")
+        self.assertFalse(is_mock)
+        self.assertEqual(summary["method"], "nested method")
+        self.assertEqual(summary["background"], "")
 
     @patch("app.services.ai_summary_service.chat_with_deepseek")
     def test_provider_failure_uses_complete_fallback(self, chat):
@@ -143,8 +175,15 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(result["model_name"], "validated-model")
 
     @patch("app.services.ai_summary_service.generate_paper_summary_result")
-    def test_summary_adapter_rejects_incomplete_real_result(self, generate):
+    def test_summary_adapter_normalizes_incomplete_real_result(self, generate):
         generate.return_value = ({"background": "only one field"}, False, "model")
+        result = safe_generate_summary("paper")
+        self.assertFalse(result["is_mock"])
+        self.assertEqual(set(result["summary"]), set(SUMMARY_FIELDS))
+
+    @patch("app.services.ai_summary_service.generate_paper_summary_result")
+    def test_summary_adapter_falls_back_on_upstream_exception(self, generate):
+        generate.side_effect = LLMServiceError(AIErrorReason.TIMEOUT, "safe timeout")
         result = safe_generate_summary("paper")
         self.assertTrue(result["is_mock"])
         self.assertEqual(set(result["summary"]), set(SUMMARY_FIELDS))
@@ -293,13 +332,14 @@ class QAServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             answer_question_about_paper(" ", "paper", 1)
 
+    @patch("app.services.qa_service.chat_with_deepseek", return_value='{"answer":"direct answer"}')
     @patch("app.services.qa_service.validate_vector_store", side_effect=FileNotFoundError("missing"))
     @patch("app.services.qa_service.get_embedding", return_value=[0.1, 0.2])
-    def test_missing_index_is_controlled(self, embedding, _validate):
+    def test_missing_index_uses_bounded_direct_context(self, embedding, _validate, _chat):
         result = answer_question_about_paper("question", "paper", 1)
-        self.assertEqual(result["failure_reason"], "missing_index")
-        self.assertTrue(result["is_mock"])
-        self.assertEqual(result["evidence"], [])
+        self.assertIsNone(result["failure_reason"])
+        self.assertFalse(result["is_mock"])
+        self.assertEqual(result["evidence"], ["paper"])
         embedding.assert_not_called()
 
     @patch("app.services.qa_service.validate_vector_store")
