@@ -1,5 +1,6 @@
 """Build a useful paper graph from saved and lightweight inferred relations."""
 
+import json
 import re
 from itertools import combinations
 
@@ -115,13 +116,25 @@ def build_paper_graph(db: Session, user_id: int) -> dict:
         if relation_key in seen_relations:
             continue
         seen_relations.add(relation_key)
+        description, is_mock = relation.relation_reason, False
+        try:
+            metadata = json.loads(relation.relation_reason or "")
+            if isinstance(metadata, dict):
+                description = metadata.get("description")
+                is_mock = bool(metadata.get("is_mock"))
+        except (TypeError, json.JSONDecodeError):
+            pass
         edges.append({
+            "id": relation.id,
             "source": relation.source_paper_id,
             "target": relation.target_paper_id,
             "relation_type": relation.relation_type,
             "label": RELATION_LABELS.get(relation.relation_type, relation.relation_type),
-            "relation_reason": relation.relation_reason,
+            "relation_reason": description,
+            "description": description,
             "confidence": relation.confidence,
+            "weight": relation.confidence,
+            "is_mock": is_mock,
             "inferred": False,
         })
     occupied = {frozenset((edge["source"], edge["target"])) for edge in edges}
@@ -129,7 +142,9 @@ def build_paper_graph(db: Session, user_id: int) -> dict:
 
     return {
         "nodes": [
-            {"id": paper.id, "name": paper.title, "year": paper.year, "category": "paper"}
+            {"id": paper.id, "paper_id": paper.id, "name": paper.title, "title": paper.title,
+             "authors": paper.authors, "year": paper.year, "venue": paper.venue,
+             "read_status": paper.read_status, "category": "paper"}
             for paper in papers
         ],
         "edges": edges,

@@ -65,7 +65,7 @@ def chat_completion(messages: list[dict], model: str | None = None) -> str:
                 "Authorization": f"Bearer {settings.ecnu_api_key}",
             },
             json={"messages": normalized, "stream": False, "model": model or settings.ecnu_model},
-            timeout=settings.ecnu_api_timeout_seconds,
+            timeout=(10.0, settings.ecnu_api_timeout_seconds),
         )
     except requests.Timeout as exc:
         raise LLMServiceError(AIErrorReason.TIMEOUT, "ChatECNU 请求超时") from exc
