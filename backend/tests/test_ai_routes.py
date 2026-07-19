@@ -173,7 +173,10 @@ class AIRouteTests(unittest.TestCase):
             "risks": ["risk"],
             "is_mock": True,
         }
-        with patch("app.api.agent.generate_research_plan", return_value=fallback):
+        with patch("app.api.agent.safe_generate_research_plan", return_value={
+            "reading_route": [], "stages": fallback["stages"], "weekly_plan": fallback["weekly_plan"],
+            "tasks": [], "risks": fallback["risks"], "recommended_papers": [], "is_mock": True,
+        }):
             response = self.client.post(
                 "/api/agent/research-plan",
                 json={"topic": "topic", "level": "beginner", "duration_weeks": 1},
