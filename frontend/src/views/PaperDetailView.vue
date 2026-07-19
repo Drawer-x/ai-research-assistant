@@ -44,7 +44,7 @@
         <div class="summary-header-left">
           <span class="summary-icon">🤖</span>
           <h3>AI 论文总结</h3>
-          <span class="summary-badge" v-if="summary">已生成</span>
+          <span class="summary-badge" v-if="summary">{{ summaryIsMock ? 'Fallback/模拟结果' : '已生成' }}</span>
         </div>
         <el-button
           type="primary"
@@ -91,8 +91,8 @@
           <div class="summary-item">
             <div class="summary-item-icon">📊</div>
             <div class="summary-item-body">
-              <span class="summary-item-label">主要结论</span>
-              <p>{{ summary.conclusion || '暂无' }}</p>
+              <span class="summary-item-label">实验与结果</span>
+              <p>{{ [summary.experiment, summary.result].filter(Boolean).join('；') || '暂无' }}</p>
             </div>
           </div>
           <div class="summary-item highlight">
@@ -142,6 +142,11 @@
             <span class="qa-avatar">🤖</span>
             <span class="qa-text">{{ item.answer }}</span>
           </div>
+          <div v-if="item.evidence?.length" class="qa-evidence">
+            <strong>证据：</strong>
+            <div v-for="(evidence, evidenceIndex) in item.evidence" :key="evidenceIndex">{{ evidence }}</div>
+          </div>
+          <el-tag v-if="item.is_mock" size="small" type="warning">Fallback/模拟结果</el-tag>
         </div>
       </div>
 
@@ -239,6 +244,7 @@ const pageLoading = ref(false)
 const paper = ref(null)
 const summary = ref(null)
 const summaryLoading = ref(false)
+const summaryIsMock = ref(false)
 const question = ref('')
 const qaLoading = ref(false)
 const qaHistory = ref([])
@@ -276,6 +282,7 @@ const fetchPaperDetail = async () => {
         ...data,
         id: data.paper_id || data.id
       }
+      await Promise.all([loadSummaryHistory(), loadQaHistory()])
     } else {
       ElMessage.error(res.data.message || '获取论文详情失败')
     }
@@ -303,30 +310,30 @@ const generateSummary = async () => {
     console.log('📄 AI 总结响应:', res.data)
     
     if (res.data.code === 200 || res.data.code === 0) {
-      summary.value = res.data.data
+      summary.value = res.data.data.summary
+      summaryIsMock.value = Boolean(res.data.data.is_mock)
       ElMessage.success('AI 总结生成成功！')
     } else {
       ElMessage.error(res.data.message || '生成总结失败')
-      loadMockSummary()
     }
   } catch (error) {
     console.error('生成总结失败:', error)
-    loadMockSummary()
-    ElMessage.warning('使用示例数据展示总结效果')
+    ElMessage.error(error.response?.data?.message || '生成总结失败')
   } finally {
     summaryLoading.value = false
   }
 }
 
-const loadMockSummary = () => {
-  summary.value = {
-    background: '近年来，深度学习在自然语言处理领域取得了显著进展，但传统的序列建模方法仍面临并行计算效率低和长距离依赖捕捉困难的问题。',
-    problem: '如何设计一种能够高效并行计算且能有效捕捉长距离依赖的序列建模架构？',
-    method: '提出了 Transformer 架构，核心是自注意力机制（Self-Attention）和多头注意力（Multi-Head Attention），完全摒弃了 RNN 和 CNN。',
-    conclusion: '在 WMT 2014 英德翻译任务上达到 28.4 BLEU，比之前最好的结果提高了 2 BLEU 以上，且训练速度大幅提升。',
-    innovation: '1) 首次提出完全基于注意力的序列模型；2) 多头注意力机制捕捉不同子空间的特征；3) 为后续 BERT、GPT 等大模型奠定了基础。',
-    limitation: '计算复杂度随序列长度平方增长，在处理超长序列时内存消耗大；模型的可解释性仍有待提高。'
-  }
+const loadSummaryHistory = async () => {
+  const res = await axios.get(`/api/papers/${paperId.value}/summaries`)
+  const latest = res.data.data?.[0]
+  summary.value = latest?.content || null
+  summaryIsMock.value = Boolean(latest?.is_mock)
+}
+
+const loadQaHistory = async () => {
+  const res = await axios.get(`/api/papers/${paperId.value}/qa-records`)
+  qaHistory.value = res.data.data || []
 }
 
 // ============================================================
@@ -353,42 +360,24 @@ const askQuestion = async () => {
     if (res.data.code === 200 || res.data.code === 0) {
       qaHistory.value.push({
         question: q,
-        answer: res.data.data.answer || '暂无回答'
+        answer: res.data.data.answer || '暂无回答',
+        evidence: res.data.data.evidence || [],
+        is_mock: Boolean(res.data.data.is_mock)
       })
       question.value = ''
       await nextTick()
       scrollToBottom()
     } else {
       ElMessage.error(res.data.message || '问答失败')
-      addMockAnswer(q)
     }
   } catch (error) {
     console.error('问答失败:', error)
-    addMockAnswer(q)
-    ElMessage.warning('使用示例回答展示效果')
+    ElMessage.error(error.response?.data?.message || '问答失败')
   } finally {
     qaLoading.value = false
   }
 }
 
-const addMockAnswer = (q) => {
-  const mockAnswers = [
-    '根据论文内容，该研究主要关注序列建模与机器翻译任务，提出了基于自注意力机制的 Transformer 架构。',
-    '论文使用了 WMT 2014 英德翻译数据集（约 450 万对句子）和英法翻译数据集（约 3600 万对句子）。',
-    '主要的创新点包括：1) 完全基于注意力的架构；2) 多头注意力机制；3) 位置编码处理序列顺序。',
-    '实验结果表明，Transformer 在 WMT 2014 英德翻译上达到 28.4 BLEU，训练时间相比传统序列模型大幅减少。',
-    '该架构为 BERT、GPT 等后续大模型奠定了基础，是自然语言处理领域的重要突破。'
-  ]
-  
-  qaHistory.value.push({
-    question: q,
-    answer: mockAnswers[qaHistory.value.length % mockAnswers.length]
-  })
-  question.value = ''
-  setTimeout(() => {
-    scrollToBottom()
-  }, 100)
-}
 
 const scrollToBottom = () => {
   if (qaHistoryRef.value) {

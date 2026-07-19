@@ -12,7 +12,7 @@
         <span class="selection-label">选择论文（已选 {{ selectedPapers.length }} 篇）</span>
         <div>
           <el-button size="small" @click="clearSelection">清空</el-button>
-          <el-button size="small" type="primary" @click="generateCompare" :disabled="selectedPapers.length < 2">
+          <el-button size="small" type="primary" @click="generateCompare" :loading="compareLoading" :disabled="selectedPapers.length < 2">
             生成对比分析
           </el-button>
           <el-button size="small" type="success" @click="generateOutline" :disabled="selectedPapers.length < 2">
@@ -41,14 +41,16 @@
         <h3>📊 论文对比分析</h3>
         <el-button size="small" @click="compareResult = null">关闭</el-button>
       </div>
-      <el-table :data="compareResult" border stripe style="width: 100%">
-        <el-table-column prop="paper" label="论文" width="180" />
+      <el-tag v-if="compareIsMock" type="warning" size="small">Fallback/模拟结果</el-tag>
+      <el-table :data="compareResult" border stripe style="width: 100%; margin-top: 12px">
+        <el-table-column prop="title" label="论文" width="180" />
         <el-table-column prop="problem" label="研究问题" />
         <el-table-column prop="method" label="核心方法" width="150" />
         <el-table-column prop="dataset" label="数据集" width="140" />
         <el-table-column prop="result" label="主要结果" />
         <el-table-column prop="limitation" label="局限性" width="140" />
       </el-table>
+      <p class="comparison-summary">{{ compareSummary }}</p>
     </div>
 
     <!-- 综述大纲 -->
@@ -73,21 +75,19 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import axios from '../utils/axios'
 
 // ===== 论文数据（从文献列表同步） =====
-const allPapers = ref([
-  { id: 1, title: 'Attention Is All You Need', authors: 'Vaswani et al.', year: '2017', tags: ['Transformer'] },
-  { id: 2, title: 'BERT: Pre-training of Deep Bidirectional Transformers', authors: 'Devlin et al.', year: '2018', tags: ['BERT'] },
-  { id: 3, title: 'GPT-3: Language Models are Few-Shot Learners', authors: 'Brown et al.', year: '2020', tags: ['GPT'] },
-  { id: 4, title: 'ResNet: Deep Residual Learning', authors: 'He et al.', year: '2016', tags: ['CNN'] },
-  { id: 5, title: 'GAN: Generative Adversarial Nets', authors: 'Goodfellow et al.', year: '2014', tags: ['GAN'] }
-])
+const allPapers = ref([])
 
 const selectedIds = ref([])
 const compareResult = ref(null)
 const outlineResult = ref(null)
+const compareLoading = ref(false)
+const compareSummary = ref('')
+const compareIsMock = ref(false)
 
 // ===== 辅助 =====
 const selectedPapers = computed(() => allPapers.value.filter(p => selectedIds.value.includes(p.id)))
@@ -109,29 +109,52 @@ const clearSelection = () => {
   outlineResult.value = null
 }
 
-// ===== 生成对比分析（Mock） =====
-const generateCompare = () => {
+const loadPapers = async () => {
+  try {
+    const response = await axios.get('/api/papers')
+    allPapers.value = response.data.data || []
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '加载论文列表失败')
+  }
+}
+
+const loadComparisonHistory = async () => {
+  try {
+    const response = await axios.get('/api/papers/comparisons')
+    const latest = response.data.data?.[0]
+    if (latest?.result) {
+      compareResult.value = latest.result.comparison_table || []
+      compareSummary.value = latest.result.summary || ''
+      compareIsMock.value = Boolean(latest.is_mock)
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '加载对比历史失败')
+  }
+}
+
+// ===== 调用后端生成并持久化对比分析 =====
+const generateCompare = async () => {
   if (selectedPapers.value.length < 2) {
     ElMessage.warning('请至少选择2篇论文')
     return
   }
 
-  const topics = ['Transformer 架构研究', '预训练语言模型', '大规模语言模型']
-  const methods = ['Multi-Head Attention', 'Masked LM', 'Few-shot Learning']
-  const datasets = ['WMT 2014', 'BookCorpus', 'Common Crawl']
-  const results = ['BLEU 28.4', 'SOTA on GLUE', '175B parameters']
-  const limitations = ['长序列计算量大', '预训练成本高', '推理延迟大']
-
-  compareResult.value = selectedPapers.value.map((p, i) => ({
-    paper: p.title,
-    problem: topics[i % topics.length],
-    method: methods[i % methods.length],
-    dataset: datasets[i % datasets.length],
-    result: results[i % results.length],
-    limitation: limitations[i % limitations.length]
-  }))
-
-  ElMessage.success('对比分析生成完成！')
+  compareLoading.value = true
+  try {
+    const response = await axios.post('/api/papers/compare', {
+      paper_ids: selectedIds.value,
+      compare_dimensions: ['problem', 'method', 'dataset', 'result', 'limitation']
+    })
+    const data = response.data.data
+    compareResult.value = data.comparison_table || []
+    compareSummary.value = data.summary || ''
+    compareIsMock.value = Boolean(data.is_mock)
+    ElMessage.success('对比分析生成完成！')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '对比分析失败')
+  } finally {
+    compareLoading.value = false
+  }
 }
 
 // ===== 生成综述大纲（Mock） =====
@@ -174,6 +197,8 @@ const generateOutline = () => {
 
   ElMessage.success('综述大纲生成完成！')
 }
+
+onMounted(() => Promise.all([loadPapers(), loadComparisonHistory()]))
 </script>
 
 <style scoped>
@@ -282,6 +307,7 @@ const generateOutline = () => {
   flex-direction: column;
   gap: 16px;
 }
+.comparison-summary { color: #555; line-height: 1.7; }
 .outline-section h4 {
   color: #1a2332;
   margin: 0 0 6px 0;
