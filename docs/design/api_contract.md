@@ -136,8 +136,12 @@ AI 总结响应的 `data`：
 
 ## AI 与 Mock 降级边界
 
+ChatECNU 请求由后端统一发送到 `ECNU_API_URL`，模型取自 `ECNU_MODEL`，超时取自 `ECNU_API_TIMEOUT_SECONDS`；请求体为 `messages`、`stream=false` 和 `model`。API Key 只能来自被 Git 忽略的 `backend/.env`，不会传到前端或写入日志。
+
+响应兼容 `choices[0].message.content`、`data.choices[0].message.content`、顶层 `content` 和 `message.content`。HTTP 错误、超时、连接失败、非 JSON、缺少文本或业务 JSON 校验失败均进入 fallback，不向客户端透传上游原始响应。
+
 - adapter 优先调用 `generate_paper_summary_result`，兼容嵌套 `summary/content/data` 后规范化七个字段；失败时返回固定结构化占位内容。两种结果都会写入 `ai_summaries` 并通过 `is_mock` 区分。
-- `answer_question_about_paper` 优先使用向量检索与 AI 回答；缺少 Key、索引或依赖异常时返回固定回答和空证据。
+- `answer_question_about_paper` 优先从当前用户论文的向量索引检索证据片段，再通过统一 ChatECNU client 基于片段回答；索引或 embedding 不可用但正文非空时使用安全截断的正文片段，正文为空或 ChatECNU 调用/解析失败时才返回 fallback。
 - 关系图节点来自数据库；关系边仅来自已有 `paper_relations`，Sprint 1 不自动推断关系。
 - `generate_research_plan` 优先调用 AI service，失败时按周数生成占位计划，并写入 `research_plans`。
 - PDF 文本通过 PyMuPDF 尝试提取；标题和摘要自动识别仍是占位能力。

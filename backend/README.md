@@ -51,4 +51,38 @@ python scripts/sprint2_smoke_test.py --base-url http://127.0.0.1:8767
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-AI 相关环境变量统一由 `app/core/config.py` 读取：`ECNU_API_KEY`、`ECNU_BASE_URL`、`ECNU_CHAT_MODEL`、`ECNU_EMBEDDING_MODEL`、`AI_TIMEOUT_SECONDS` 和 `AI_MAX_PROMPT_CHARS`。请复制 `.env.example` 后填写自己的值，不要提交 `.env`。
+## ChatECNU 配置
+
+Chat completion 统一由 `app/services/llm_client.py` 调用，前端不会接触 ChatECNU 或 API Key。复制 `.env.example` 为 `backend/.env`，只在该文件配置：
+
+```dotenv
+ECNU_API_KEY=
+ECNU_API_URL=https://chat.ecnu.edu.cn/open/api/v1/chat/completions
+ECNU_MODEL=ecnu-plus
+ECNU_API_TIMEOUT_SECONDS=60
+```
+
+`backend/.env` 已被 Git 忽略，不得提交或把 Key 写入前端。聊天请求固定使用 `stream=false`。`ECNU_BASE_URL`、`ECNU_EMBEDDING_MODEL` 等旧变量继续用于现有 embedding/RAG 链路。
+
+未配置 Key、连接或超时失败、HTTP 非成功、非 JSON、响应缺少文本、模型结构化 JSON 非法时，summary、QA、compare 会自动 fallback。接口中的 `is_mock=false` 表示真实 AI service 成功；`is_mock=true` 表示 fallback。
+
+mock 单元测试不访问互联网：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+连通性脚本默认不发送请求；仅以下命令会显式访问真实 ChatECNU：
+
+```bash
+python scripts/test_ecnu_api.py --live
+```
+
+诊断 summary、QA、compare 三条真实业务链路（默认同样不联网）：
+
+```bash
+python scripts/test_ecnu_business_flow.py
+python scripts/test_ecnu_business_flow.py --live
+```
+
+脚本只输出配置状态、`is_mock`、字段名、文本字符数和安全错误摘要。QA 优先使用用户论文的向量检索；索引或 embedding 暂不可用但论文正文非空时，会改用受限正文片段调用 ChatECNU，避免把可用真实模型错误降级为 Mock。

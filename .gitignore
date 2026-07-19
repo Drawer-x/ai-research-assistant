@@ -38,6 +38,7 @@ backend/uploads/*
 # Generated vector indexes
 backend/vector_db/*.index
 backend/vector_db/*.pkl
+backend/vector_db/*.lock
 
 # Logs
 logs/
