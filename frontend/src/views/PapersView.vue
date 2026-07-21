@@ -1,130 +1,228 @@
 <template>
   <div class="papers-container">
-    <!-- 顶部欢迎区 -->
-    <div class="welcome-section">
-      <div class="welcome-text">
-        <h1 class="page-title">📚 我的文献库</h1>
-        <p class="page-subtitle">管理你的科研文献，让阅读更有条理</p>
-      </div>
-      <div class="welcome-stats">
-        <div class="stat-item">
-          <span class="stat-number">{{ papers.length }}</span>
-          <span class="stat-label">总文献</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ readCount }}</span>
-          <span class="stat-label">已读</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-number">{{ unreadCount }}</span>
-          <span class="stat-label">未读</span>
-        </div>
-      </div>
+    <!-- ===== 顶部 ===== -->
+    <div class="page-header">
+      <h1 class="page-title">
+        <span class="title-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </span>
+        <span class="title-text">我的文献库</span>
+        <span class="title-badge">{{ papers.length }} 篇</span>
+      </h1>
+      <p class="page-desc">管理你的科研文献，让阅读更有条理</p>
     </div>
 
-    <!-- 操作栏 -->
-    <div class="action-bar">
-      <div class="action-left">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索论文标题、作者..."
-          clearable
-          prefix-icon="Search"
-          size="large"
-          class="search-input"
-        />
+    <!-- ===== 操作栏 ===== -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="search-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            v-model="searchKeyword"
+            class="search-input"
+            placeholder="搜索论文标题、作者..."
+          />
+        </div>
       </div>
-      <div class="action-right">
-        <el-button type="warning" @click="$router.push('/agent')" :icon="Edit" round>
+      <div class="toolbar-right">
+        <button class="tool-btn" @click="$router.push('/agent')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
           Agent 规划
-        </el-button>
-        <el-button type="success" @click="$router.push('/graph')" :icon="Share" round>
+        </button>
+        <button class="tool-btn" @click="$router.push('/graph')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="4" r="2"/>
+            <circle cx="4" cy="16" r="2"/>
+            <circle cx="20" cy="16" r="2"/>
+            <line x1="12" y1="6" x2="12" y2="10"/>
+            <line x1="6" y1="17" x2="10" y2="14"/>
+            <line x1="18" y1="17" x2="14" y2="14"/>
+          </svg>
           关系图
-        </el-button>
-        <el-button type="info" @click="$router.push('/review')" :icon="Edit" round>
+        </button>
+        <button class="tool-btn" @click="$router.push('/review')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
           综述辅助
-        </el-button>
-        <el-button type="primary" @click="showUpload = true" :icon="Upload" round>
+        </button>
+        <button class="btn-primary" @click="showUpload = true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
           上传论文
-        </el-button>
+        </button>
       </div>
     </div>
 
-    <!-- 论文列表 -->
-    <div class="papers-list" v-if="filteredPapers.length > 0">
+    <!-- ===== 统计 ===== -->
+    <div class="stats-row">
+      <div class="stat-item">
+        <span class="stat-number">{{ papers.length }}</span>
+        <span class="stat-label">总文献</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{{ readCount }}</span>
+        <span class="stat-label">已读</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{{ readingCount }}</span>
+        <span class="stat-label">在读</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{{ unreadCount }}</span>
+        <span class="stat-label">未读</span>
+      </div>
+    </div>
+
+    <!-- ===== 论文列表 ===== -->
+    <div v-if="filteredPapers.length > 0" class="papers-list">
       <div
         v-for="paper in filteredPapers"
         :key="paper.paper_id || paper.id"
         class="paper-item"
-        @click="goToDetail(paper.paper_id || paper.id)"
       >
-        <div class="paper-icon">
-          <span class="icon-emoji">📄</span>
+        <div class="paper-icon" @click="goToDetail(paper.paper_id || paper.id)">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
         </div>
-        <div class="paper-content">
+        <div class="paper-content" @click="goToDetail(paper.paper_id || paper.id)">
           <div class="paper-header">
             <h3 class="paper-title">{{ paper.title }}</h3>
-            <el-tag :type="getStatusType(paper.status)" size="small" effect="light">
-              {{ paper.status || '未读' }}
-            </el-tag>
+            <span 
+              class="status-tag" 
+              :class="{
+                'status-read': getDisplayStatus(paper.status) === '已读',
+                'status-reading': getDisplayStatus(paper.status) === '在读',
+                'status-unread': getDisplayStatus(paper.status) === '未读' || !paper.status
+              }"
+              @click.stop="toggleStatus(paper)"
+            >
+              {{ getDisplayStatus(paper.status) || '未读' }}
+            </span>
           </div>
-          <div class="paper-info">
-            <span v-if="paper.authors"><el-icon><User /></el-icon> {{ paper.authors }}</span>
-            <span v-if="paper.year"><el-icon><Calendar /></el-icon> {{ paper.year }}</span>
-            <span><el-icon><Timer /></el-icon> {{ formatDate(paper.created_at) }}</span>
+          <div class="paper-meta">
+            <span v-if="paper.authors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              {{ paper.authors }}
+            </span>
+            <span v-if="paper.year">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {{ paper.year }}
+            </span>
+            <span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {{ formatDate(paper.created_at) }}
+            </span>
           </div>
-          <div class="paper-tags" v-if="paper.tags && paper.tags.length > 0">
+          <div v-if="paper.tags && paper.tags.length > 0" class="paper-tags">
             <span v-for="tag in paper.tags" :key="tag" class="tag">#{{ tag }}</span>
           </div>
         </div>
-        <div class="paper-arrow">
-          <el-icon><ArrowRight /></el-icon>
+        <div class="paper-arrow" @click="goToDetail(paper.paper_id || paper.id)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
         </div>
       </div>
     </div>
 
-    <!-- 空状态 -->
+    <!-- ===== 空状态 ===== -->
     <div v-else class="empty-state">
-      <div class="empty-icon">📭</div>
+      <div class="empty-icon">
+        <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+      </div>
       <h3>还没有文献</h3>
       <p>上传你的第一篇论文，开始科研之旅</p>
-      <el-button type="primary" @click="showUpload = true" :icon="Upload" round>
+      <button class="btn-primary" @click="showUpload = true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
         上传论文
-      </el-button>
+      </button>
     </div>
 
-    <!-- 上传对话框 -->
-    <el-dialog v-model="showUpload" title="上传论文" width="480px" destroy-on-close>
-      <el-upload
-        ref="uploadRef"
-        drag
-        action="/api/papers/upload"
-        :headers="uploadHeaders"
-        :on-success="onUploadSuccess"
-        :on-error="onUploadError"
-        accept=".pdf"
-        name="file"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">
-          拖拽 PDF 文件到此处，或 <em>点击上传</em>
-        </div>
-        <template #tip>
-          <div class="el-upload__tip">仅支持 PDF 格式</div>
-        </template>
-      </el-upload>
-    </el-dialog>
+    <!-- ===== 上传对话框 ===== -->
+    <div class="dialog-overlay" v-if="showUpload" @click="showUpload = false"></div>
+    <div class="dialog" :class="{ open: showUpload }">
+      <div class="dialog-header">
+        <h3 class="dialog-title">上传论文</h3>
+        <button class="dialog-close" @click="showUpload = false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <el-upload
+          ref="uploadRef"
+          drag
+          action="/api/papers/upload"
+          :headers="uploadHeaders"
+          :on-success="onUploadSuccess"
+          :on-error="onUploadError"
+          accept=".pdf"
+          name="file"
+          class="upload-area"
+        >
+          <div class="upload-content">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div class="upload-text">
+              拖拽 PDF 文件到此处，或 <span class="upload-link">点击上传</span>
+            </div>
+            <div class="upload-tip">仅支持 PDF 格式</div>
+          </div>
+        </el-upload>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Upload, UploadFilled, User, Calendar, Search, Share, Edit, Timer, ArrowRight } from '@element-plus/icons-vue'
 import axios from '../utils/axios'
 
 const router = useRouter()
+const route = useRoute()
 const papers = ref([])
 const searchKeyword = ref('')
 const showUpload = ref(false)
@@ -134,8 +232,42 @@ const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('token') || ''}`
 }))
 
-const readCount = computed(() => papers.value.filter(p => p.status === '已读').length)
-const unreadCount = computed(() => papers.value.filter(p => p.status === '未读' || !p.status).length)
+// ===== 状态映射 =====
+const displayStatusMap = {
+  'unread': '未读',
+  'rough_read': '在读',
+  'intensive_read': '已读',
+  'to_reproduce': '待复现',
+  'for_review': '待评审',
+  'archived': '已归档'
+}
+
+const backendStatusMap = {
+  '未读': 'unread',
+  '在读': 'rough_read',
+  '已读': 'intensive_read'
+}
+
+const statusCycle = ['unread', 'rough_read', 'intensive_read']
+
+// ===== 获取显示状态 =====
+const getDisplayStatus = (status) => {
+  if (!status) return '未读'
+  return displayStatusMap[status] || status
+}
+
+// ===== 统计 =====
+const readCount = computed(() => {
+  return papers.value.filter(p => getDisplayStatus(p.status) === '已读').length
+})
+
+const readingCount = computed(() => {
+  return papers.value.filter(p => getDisplayStatus(p.status) === '在读').length
+})
+
+const unreadCount = computed(() => {
+  return papers.value.filter(p => getDisplayStatus(p.status) === '未读' || !p.status).length
+})
 
 const filteredPapers = computed(() => {
   if (!searchKeyword.value) return papers.value
@@ -146,49 +278,62 @@ const filteredPapers = computed(() => {
   )
 })
 
-const getStatusType = (status) => {
-  const map = { '已读': 'success', '在读': 'warning', '未读': 'info' }
-  return map[status] || 'info'
-}
-
+// ===== 格式化日期 =====
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-// ===== 跳转到论文详情（兼容 paper_id 和 id） =====
+// ===== 跳转详情 =====
 const goToDetail = (id) => {
-  console.log('🔍 [PapersView] goToDetail 被调用，收到的 id:', id, '，类型:', typeof id)
-  
   if (!id) {
-    console.error('❌ 论文 ID 无效:', id)
-    ElMessage.error('论文 ID 无效，无法跳转')
+    ElMessage.error('论文 ID 无效')
     return
   }
-  
-  // 确保 ID 是字符串
-  const idStr = String(id)
-  console.log('📄 跳转到论文详情，ID:', idStr)
-  router.push(`/papers/${idStr}`)
+  router.push(`/papers/${id}`)
 }
 
+// ===== 切换阅读状态 =====
+const toggleStatus = async (paper) => {
+  const currentDisplay = getDisplayStatus(paper.status)
+  const currentBackend = backendStatusMap[currentDisplay] || 'unread'
+  
+  const currentIndex = statusCycle.indexOf(currentBackend)
+  const nextBackend = statusCycle[(currentIndex + 1) % statusCycle.length]
+  const nextDisplay = displayStatusMap[nextBackend]
+
+  try {
+    const res = await axios.put(`/api/papers/${paper.paper_id || paper.id}/status`, {
+      read_status: nextBackend
+    })
+    if (res.data.code === 200 || res.data.code === 0) {
+      paper.status = nextBackend
+      ElMessage.success(`状态已更新为「${nextDisplay}」`)
+    } else {
+      ElMessage.error(res.data.message || '更新失败')
+    }
+  } catch (error) {
+    console.error('更新状态失败:', error)
+    ElMessage.error(error.response?.data?.message || '更新状态失败，请重试')
+  }
+}
+
+// ===== 加载论文列表 =====
 const loadPapers = async () => {
   try {
     const res = await axios.get('/api/papers')
     if (res.data.code === 200 || res.data.code === 0) {
       const data = res.data.data || []
-      // 兼容处理：确保每个论文对象都有 id 字段（从 paper_id 映射）
       papers.value = data.map(item => ({
         ...item,
         id: item.paper_id || item.id
       }))
-      console.log('📚 加载的论文数据:', papers.value)
     } else {
       loadMockPapers()
     }
   } catch (error) {
-    console.warn('加载文献列表失败，使用 Mock 数据:', error)
+    console.warn('加载文献列表失败，使用示例数据:', error)
     loadMockPapers()
   }
 }
@@ -201,7 +346,7 @@ const loadMockPapers = () => {
       title: 'Attention Is All You Need',
       authors: 'Vaswani et al.',
       year: '2017',
-      status: '已读',
+      status: 'intensive_read',
       tags: ['Transformer', 'NLP'],
       created_at: '2026-07-10T10:00:00'
     },
@@ -211,7 +356,7 @@ const loadMockPapers = () => {
       title: 'BERT: Pre-training of Deep Bidirectional Transformers',
       authors: 'Devlin et al.',
       year: '2018',
-      status: '在读',
+      status: 'rough_read',
       tags: ['BERT', '预训练'],
       created_at: '2026-07-11T14:30:00'
     },
@@ -221,12 +366,11 @@ const loadMockPapers = () => {
       title: 'GPT-3: Language Models are Few-Shot Learners',
       authors: 'Brown et al.',
       year: '2020',
-      status: '未读',
+      status: 'unread',
       tags: ['GPT', '大语言模型'],
       created_at: '2026-07-12T09:15:00'
     }
   ]
-  console.log('📚 Mock 论文数据:', papers.value)
 }
 
 const onUploadSuccess = (response) => {
@@ -243,6 +387,16 @@ const onUploadError = () => {
   ElMessage.error('上传失败，请重试')
 }
 
+// ===== 监听路由变化，从详情页返回时刷新 =====
+watch(
+  () => route.path,
+  (newPath) => {
+    if (newPath === '/papers') {
+      loadPapers()
+    }
+  }
+)
+
 onMounted(() => {
   loadPapers()
 })
@@ -250,180 +404,540 @@ onMounted(() => {
 
 <style scoped>
 .papers-container {
+  padding: 24px 20px;
+  max-width: 1200px;
+  margin: 0 auto;
   min-height: 100vh;
-  background: #f5f7fa;
-  padding: 32px 40px;
+  background: var(--bg-primary);
+  background-image: radial-gradient(ellipse at 10% 20%, rgba(95, 195, 228, 0.04) 0%, transparent 50%),
+                    radial-gradient(ellipse at 90% 80%, rgba(123, 200, 164, 0.04) 0%, transparent 50%);
 }
 
-/* ===== 欢迎区 ===== */
-.welcome-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-  gap: 16px;
+.page-header {
+  margin-bottom: 24px;
+  text-align: center;
 }
+
 .page-title {
   font-size: 28px;
-  font-weight: 700;
-  color: #1a2332;
+  font-weight: 800;
+  color: var(--text-primary);
   margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
-.page-subtitle {
-  color: #8c8f9c;
+
+.title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  background: var(--primary-gradient);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.title-icon svg {
+  stroke: #fff;
+}
+
+.title-text {
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.title-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--primary-gradient);
+  padding: 4px 16px;
+  border-radius: var(--radius-full);
+  -webkit-text-fill-color: #fff;
+  box-shadow: 0 2px 12px rgba(95, 195, 228, 0.2);
+}
+
+.page-desc {
+  color: var(--text-muted);
   font-size: 15px;
   margin: 0;
 }
-.welcome-stats {
-  display: flex;
-  gap: 32px;
-}
-.stat-item {
-  text-align: center;
-}
-.stat-number {
-  display: block;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1a2332;
-}
-.stat-label {
-  font-size: 13px;
-  color: #8c8f9c;
-}
 
-/* ===== 操作栏 ===== */
-.action-bar {
+.toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-xl);
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-sm);
 }
-.action-left {
+
+.toolbar-left {
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
 }
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(248, 250, 255, 0.6);
+  border-radius: var(--radius-full);
+  padding: 0 16px;
+  transition: all 0.3s ease;
+}
+
+.search-box:focus-within {
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(95, 195, 228, 0.08);
+}
+
+.search-box svg {
+  stroke: var(--text-muted);
+  flex-shrink: 0;
+}
+
 .search-input {
-  max-width: 360px;
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
 }
-.action-right {
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.toolbar-right {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-/* ===== 论文列表 ===== */
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(248, 250, 255, 0.6);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tool-btn:hover {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
+  transform: translateY(-2px);
+}
+
+.tool-btn svg {
+  stroke: currentColor;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--primary-gradient);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(95, 195, 228, 0.2);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(95, 195, 228, 0.3);
+}
+
+.btn-primary:active {
+  transform: scale(0.96);
+}
+
+.btn-primary svg {
+  stroke: #fff;
+}
+
+.stats-row {
+  display: flex;
+  gap: 32px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stat-number {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
 .papers-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+
 .paper-item {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: #ffffff;
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-lg);
   padding: 16px 20px;
   cursor: pointer;
-  transition: all 0.25s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  border: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow-sm);
 }
+
 .paper-item:hover {
-  transform: translateX(4px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  border-color: #667eea;
+  transform: translateX(6px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(95, 195, 228, 0.2);
 }
-.paper-icon .icon-emoji {
-  font-size: 28px;
-  display: block;
-  line-height: 1;
+
+.paper-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: rgba(95, 195, 228, 0.08);
+  color: var(--primary-500);
+  flex-shrink: 0;
 }
+
+.paper-icon svg {
+  stroke: currentColor;
+}
+
 .paper-content {
   flex: 1;
   min-width: 0;
 }
+
 .paper-header {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
+
 .paper-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a2332;
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.4;
 }
-.paper-info {
+
+.status-tag {
+  padding: 2px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.status-tag:hover {
+  transform: scale(1.05);
+}
+
+.status-tag:active {
+  transform: scale(0.95);
+}
+
+.status-read {
+  background: rgba(123, 200, 164, 0.15);
+  color: #2d7a5a;
+}
+.status-reading {
+  background: rgba(95, 195, 228, 0.15);
+  color: #2a7a9a;
+}
+.status-unread {
+  background: rgba(200, 210, 220, 0.2);
+  color: var(--text-muted);
+}
+
+.paper-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 14px;
   font-size: 13px;
-  color: #8c8f9c;
-  margin-top: 4px;
+  color: var(--text-muted);
+  margin-top: 3px;
 }
-.paper-info span {
-  display: flex;
+
+.paper-meta span {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
 }
+
+.paper-meta svg {
+  stroke: currentColor;
+}
+
 .paper-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
+
 .tag {
   font-size: 12px;
-  color: #b88230;
-  background: #fdf6ed;
-  padding: 1px 10px;
-  border-radius: 12px;
-}
-.paper-arrow {
-  color: #c1c7d0;
-  transition: color 0.2s;
-}
-.paper-item:hover .paper-arrow {
-  color: #667eea;
+  color: var(--primary-500);
+  background: rgba(95, 195, 228, 0.06);
+  padding: 1px 12px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
 }
 
-/* ===== 空状态 ===== */
+.paper-arrow {
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.paper-arrow svg {
+  stroke: currentColor;
+}
+
+.paper-item:hover .paper-arrow {
+  color: var(--primary-500);
+}
+
 .empty-state {
   text-align: center;
-  padding: 80px 20px;
-}
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-}
-.empty-state h3 {
-  font-size: 20px;
-  color: #1a2332;
-  margin: 0 0 8px 0;
-}
-.empty-state p {
-  color: #8c8f9c;
-  margin: 0 0 20px 0;
+  padding: 60px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.6);
 }
 
-/* ===== 响应式 ===== */
+.empty-icon {
+  color: var(--text-muted);
+  opacity: 0.4;
+  margin-bottom: 12px;
+}
+
+.empty-icon svg {
+  stroke: currentColor;
+}
+
+.empty-state h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+
+.empty-state p {
+  color: var(--text-muted);
+  margin: 0 0 20px 0;
+  font-size: 15px;
+}
+
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dialog {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  width: 520px;
+  max-width: 92vw;
+  max-height: 80vh;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.08);
+  z-index: 201;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.dialog.open {
+  transform: translateX(-50%) translateY(0);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.dialog-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dialog-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.dialog-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.dialog-body {
+  padding: 24px;
+}
+
+.upload-area :deep(.el-upload) {
+  width: 100%;
+}
+
+.upload-area :deep(.el-upload-dragger) {
+  border-radius: var(--radius-lg);
+  padding: 40px 20px;
+  border: 2px dashed rgba(95, 195, 228, 0.2);
+  background: rgba(248, 250, 255, 0.6);
+  transition: all 0.3s ease;
+}
+
+.upload-area :deep(.el-upload-dragger:hover) {
+  border-color: var(--primary-500);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.upload-area :deep(.el-upload-dragger.is-dragover) {
+  border-color: var(--primary-500);
+  background: rgba(95, 195, 228, 0.04);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.upload-content svg {
+  stroke: var(--text-muted);
+  opacity: 0.5;
+}
+
+.upload-text {
+  font-size: 15px;
+}
+
+.upload-link {
+  color: var(--primary-500);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upload-tip {
+  font-size: 13px;
+  opacity: 0.6;
+}
+
 @media (max-width: 768px) {
-  .papers-container { padding: 16px; }
-  .welcome-section { flex-direction: column; align-items: stretch; }
-  .welcome-stats { justify-content: space-around; }
-  .action-bar { flex-direction: column; align-items: stretch; }
-  .action-left { width: 100%; }
-  .search-input { max-width: 100%; }
-  .action-right { justify-content: stretch; }
-  .action-right .el-button { flex: 1; }
+  .papers-container { padding: 16px 12px; }
+  .page-title { font-size: 22px; }
+  .title-icon { width: 38px; height: 38px; }
+  .title-icon svg { width: 20px; height: 20px; }
+  .title-badge { font-size: 10px; padding: 2px 12px; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar-right { justify-content: stretch; }
+  .toolbar-right button { flex: 1; justify-content: center; }
+  .stats-row { gap: 16px; padding: 12px 16px; }
+  .stat-number { font-size: 18px; }
   .paper-item { padding: 14px 16px; }
   .paper-title { font-size: 14px; }
+  .dialog { width: 100%; max-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .page-title { font-size: 19px; }
+  .title-icon { width: 32px; height: 32px; }
+  .title-icon svg { width: 16px; height: 16px; }
+  .stats-row { gap: 12px; }
+  .stat-number { font-size: 16px; }
+  .stat-label { font-size: 12px; }
+  .paper-meta { gap: 10px; font-size: 12px; }
+  .paper-icon { width: 36px; height: 36px; }
+  .paper-icon svg { width: 20px; height: 20px; }
+  .empty-state { padding: 40px 16px; }
 }
 </style>

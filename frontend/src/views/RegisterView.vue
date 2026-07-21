@@ -1,28 +1,48 @@
 <template>
   <div class="register-container">
-    <div class="register-left">
-      <div class="register-left-content">
-        <div class="logo-icon">📚</div>
-        <h1 class="register-left-title">AI 科研文献分析平台</h1>
-        <p class="register-left-desc">开始你的智能科研之旅</p>
-        <div class="register-features">
+    <!-- ===== 左侧品牌区 ===== -->
+    <div class="register-brand">
+      <div class="brand-content">
+        <div class="brand-icon">
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h1 class="brand-title">AI 科研助手</h1>
+        <p class="brand-desc">开始你的智能科研之旅</p>
+        <div class="brand-features">
           <div class="feature-item">
-            <span class="feature-icon">✅</span>
+            <span class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </span>
             <span>免费使用所有核心功能</span>
           </div>
           <div class="feature-item">
-            <span class="feature-icon">📄</span>
+            <span class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </span>
             <span>无限制文献管理</span>
           </div>
           <div class="feature-item">
-            <span class="feature-icon">🧠</span>
+            <span class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </span>
             <span>AI 驱动的智能分析</span>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="register-right">
+    <!-- ===== 右侧注册表单 ===== -->
+    <div class="register-form-wrapper">
       <div class="register-card">
         <div class="register-welcome">
           <h2>创建账号</h2>
@@ -81,22 +101,18 @@
           </el-form-item>
 
           <el-form-item>
-            <el-button
-              type="primary"
-              size="large"
-              style="width: 100%; height: 48px; font-size: 16px; border-radius: 10px;"
-              :loading="loading"
+            <button
+              class="register-btn"
+              :disabled="loading"
               @click="handleRegister"
             >
               {{ loading ? '注册中...' : '注 册' }}
-            </el-button>
+            </button>
           </el-form-item>
 
           <div class="register-footer">
             <span>已有账号？</span>
-            <el-link type="primary" @click="$router.push('/login')" underline="never">
-              立即登录
-            </el-link>
+            <span class="login-link" @click="$router.push('/login')">立即登录</span>
           </div>
         </el-form>
       </div>
@@ -151,206 +167,305 @@ const registerRules = {
 const handleRegister = async () => {
   if (!registerFormRef.value) return
 
-  await registerFormRef.value.validate(async (valid) => {
-    if (!valid) return
+  try {
+    await registerFormRef.value.validate()
+  } catch {
+    return
+  }
 
-    loading.value = true
-    try {
-      const res = await axios.post('/api/auth/register', {
-        username: registerForm.username,
-        email: registerForm.email,
-        password: registerForm.password
-      })
+  loading.value = true
+  try {
+    const res = await axios.post('/api/auth/register', {
+      username: registerForm.username,
+      email: registerForm.email,
+      password: registerForm.password
+    })
 
-      if (res.data.code === 200 || res.data.code === 0) {
-        ElMessage.success('注册成功！请登录')
-        router.push('/login')
-      } else {
-        ElMessage.error(res.data.message || '注册失败')
-      }
-    } catch (error) {
-      ElMessage.error(error.response?.data?.message || '注册失败，请重试')
-    } finally {
-      loading.value = false
+    if (res.data.code === 200 || res.data.code === 0) {
+      ElMessage.success('注册成功！请登录')
+      router.push('/login')
+    } else {
+      ElMessage.error(res.data.message || '注册失败')
     }
-  })
+  } catch (error) {
+    console.error('注册错误:', error)
+    ElMessage.error(error.response?.data?.message || '注册失败，请重试')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
 <style scoped>
+/* ============================================================
+   ===== 容器 =====
+   ============================================================ */
 .register-container {
   display: flex;
   min-height: 100vh;
-  background: #f0f2f5;
+  background: var(--bg-primary);
+  background-image: radial-gradient(ellipse at 10% 20%, rgba(95, 195, 228, 0.06) 0%, transparent 50%),
+                    radial-gradient(ellipse at 90% 80%, rgba(123, 200, 164, 0.06) 0%, transparent 50%);
 }
 
-.register-left {
+/* ============================================================
+   ===== 左侧品牌区 =====
+   ============================================================ */
+.register-brand {
   flex: 1.2;
-  background: linear-gradient(145deg, #667eea 0%, #764ba2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 60px 40px;
+  background: var(--primary-gradient);
   position: relative;
   overflow: hidden;
 }
 
-.register-left::before {
+.register-brand::before {
   content: '';
   position: absolute;
   top: -30%;
   right: -20%;
   width: 80%;
   height: 80%;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 50%;
-  pointer-events: none;
 }
 
-.register-left-content {
+.register-brand::after {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  left: -10%;
+  width: 60%;
+  height: 60%;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 50%;
+}
+
+.brand-content {
   position: relative;
   z-index: 1;
   color: #fff;
-  max-width: 460px;
+  max-width: 420px;
 }
 
-.logo-icon {
-  font-size: 64px;
+.brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
   margin-bottom: 24px;
 }
 
-.register-left-title {
+.brand-icon svg {
+  stroke: #fff;
+}
+
+.brand-title {
   font-size: 36px;
-  font-weight: 700;
-  margin-bottom: 12px;
-  letter-spacing: 1px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
 }
 
-.register-left-desc {
+.brand-desc {
   font-size: 18px;
-  opacity: 0.85;
-  margin-bottom: 40px;
+  opacity: 0.8;
   font-weight: 300;
+  margin-bottom: 40px;
 }
 
-.register-features {
+.brand-features {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .feature-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
   backdrop-filter: blur(4px);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
-  transition: background 0.3s;
+  transition: background 0.3s ease;
 }
 
 .feature-item:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .feature-icon {
-  font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.register-right {
+.feature-icon svg {
+  stroke: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================================
+   ===== 右侧注册表单 =====
+   ============================================================ */
+.register-form-wrapper {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
 }
 
 .register-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   padding: 20px 0;
 }
 
 .register-welcome {
-  margin-bottom: 36px;
+  margin-bottom: 32px;
+  text-align: center;
 }
 
 .register-welcome h2 {
   font-size: 28px;
   font-weight: 700;
-  color: #1a2332;
-  margin-bottom: 8px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }
 
 .register-welcome p {
-  color: #8c8f9c;
+  color: var(--text-muted);
   font-size: 15px;
 }
 
-.register-form .register-input {
-  border-radius: 10px;
-}
-
-.register-form :deep(.el-input__wrapper) {
-  border-radius: 10px;
-  padding: 4px 16px;
+/* ===== 表单 ===== */
+.register-form .register-input :deep(.el-input__wrapper) {
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.7);
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
   height: 48px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.3s;
+  padding: 0 16px;
 }
 
-.register-form :deep(.el-input__wrapper:hover) {
-  box-shadow: 0 1px 6px rgba(102, 126, 234, 0.15);
+.register-form .register-input :deep(.el-input__wrapper:hover) {
+  background: #ffffff;
+  border-color: rgba(95, 195, 228, 0.2);
 }
 
-.register-form :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15), 0 1px 6px rgba(102, 126, 234, 0.1);
+.register-form .register-input :deep(.el-input__wrapper.is-focus) {
+  background: #ffffff;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 4px rgba(95, 195, 228, 0.08);
 }
 
+/* ===== 注册按钮 ===== */
+.register-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--primary-gradient);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 20px rgba(95, 195, 228, 0.25);
+  height: 48px;
+}
+
+.register-btn:hover:not(:disabled) {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 8px 32px rgba(95, 195, 228, 0.35);
+}
+
+.register-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.register-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ===== 底部 ===== */
 .register-footer {
   text-align: center;
   font-size: 14px;
-  color: #8c8f9c;
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
-.register-footer .el-link {
-  font-weight: 500;
+.login-link {
+  color: var(--primary-500);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s ease;
 }
 
+.login-link:hover {
+  color: var(--primary-600);
+}
+
+/* ============================================================
+   ===== 响应式 =====
+   ============================================================ */
 @media (max-width: 900px) {
-  .register-left {
+  .register-brand {
     display: none;
   }
-  .register-right {
+
+  .register-form-wrapper {
     flex: 1;
-    background: linear-gradient(145deg, #667eea 0%, #764ba2 100%);
-    padding: 20px;
+    background: var(--bg-primary);
+    padding: 24px;
   }
+
   .register-card {
-    background: #fff;
-    padding: 40px 32px;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    padding: 32px 24px;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    border: 1px solid rgba(255, 255, 255, 0.6);
   }
+
   .register-welcome h2 {
-    color: #1a2332;
-  }
-  .register-welcome p {
-    color: #8c8f9c;
+    font-size: 24px;
   }
 }
 
 @media (max-width: 480px) {
-  .register-card {
-    padding: 24px 20px;
+  .register-form-wrapper {
+    padding: 16px;
   }
+
+  .register-card {
+    padding: 24px 16px;
+  }
+
   .register-welcome h2 {
     font-size: 22px;
+  }
+
+  .register-btn {
+    height: 44px;
+    font-size: 15px;
   }
 }
 </style>
