@@ -1,148 +1,409 @@
 <template>
   <header class="navbar">
+    <!-- Logo -->
     <div class="navbar-left">
       <span class="navbar-logo" @click="$router.push('/papers')">
-        📚 AI 科研助手
+        <span class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </span>
+        <span class="logo-text">AI 科研助手</span>
       </span>
     </div>
+
+    <!-- 导航菜单 -->
     <div class="navbar-center">
-      <el-menu
-        :default-active="activeMenu"
-        mode="horizontal"
-        router
-        class="navbar-menu"
-      >
-        <el-menu-item index="/papers" :route="{ path: '/papers' }">
-          <el-icon><Document /></el-icon> 文献库
-        </el-menu-item>
-        <el-menu-item index="/graph" :route="{ path: '/graph' }">
-          <el-icon><Share /></el-icon> 关系图
-        </el-menu-item>
-        <el-menu-item index="/agent" :route="{ path: '/agent' }">
-          <el-icon><Edit /></el-icon> Agent 规划
-        </el-menu-item>
-        <el-menu-item index="/review" :route="{ path: '/review' }">
-          <el-icon><Edit /></el-icon> 综述辅助
-        </el-menu-item>
-      </el-menu>
+      <nav class="nav-menu">
+        <a
+          v-for="item in menuItems"
+          :key="item.path"
+          class="nav-link"
+          :class="{ active: activeMenu === item.path }"
+          @click.prevent="$router.push(item.path)"
+        >
+          <span class="nav-icon" v-html="item.icon"></span>
+          {{ item.name }}
+        </a>
+      </nav>
     </div>
+
+    <!-- 用户 -->
     <div class="navbar-right">
-      <span class="navbar-user">
-        <el-avatar :size="32" icon="UserFilled" />
+      <div class="user-avatar-wrapper" @click="toggleDropdown">
+        <span class="user-avatar">{{ userInitial }}</span>
         <span class="username">{{ username || '用户' }}</span>
-      </span>
-      <el-button type="text" @click="handleLogout" class="logout-btn">
-        退出
-      </el-button>
+        <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+
+      <transition name="dropdown">
+        <div v-if="showDropdown" class="dropdown-menu">
+          <div class="dropdown-item" @click="goToPlans">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            我的计划
+          </div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item text-danger" @click="handleLogout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            退出登录
+          </div>
+        </div>
+      </transition>
     </div>
   </header>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Document, Share, Edit } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
 const username = ref('')
+const showDropdown = ref(false)
+
+const menuItems = [
+  { name: '文献库', path: '/papers', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
+  { name: '关系图', path: '/graph', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2"/><circle cx="4" cy="16" r="2"/><circle cx="20" cy="16" r="2"/><line x1="12" y1="6" x2="12" y2="10"/><line x1="6" y1="17" x2="10" y2="14"/><line x1="18" y1="17" x2="14" y2="14"/><line x1="12" y1="10" x2="10" y2="14"/><line x1="12" y1="10" x2="14" y2="14"/></svg>' },
+  { name: 'Agent 规划', path: '/agent', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>' },
+  { name: '综述辅助', path: '/review', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>' },
+  { name: '计划列表', path: '/plans', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' }
+]
 
 const activeMenu = computed(() => route.path)
 
+const userInitial = computed(() => {
+  return username.value ? username.value.charAt(0).toUpperCase() : 'U'
+})
+
+const toggleDropdown = () => {
+  showDropdown.value = !showDropdown.value
+}
+
+const goToPlans = () => {
+  showDropdown.value = false
+  router.push('/plans')
+}
+
 const handleLogout = () => {
+  showDropdown.value = false
   localStorage.removeItem('token')
   localStorage.removeItem('username')
   ElMessage.success('已退出登录')
   router.push('/login')
 }
 
+const handleClickOutside = (e) => {
+  if (showDropdown.value && !e.target.closest('.navbar-right')) {
+    showDropdown.value = false
+  }
+}
+
 onMounted(() => {
   username.value = localStorage.getItem('username') || '用户'
+  document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
 <style scoped>
+/* ============================================================
+   ===== 导航栏 =====
+   ============================================================ */
 .navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 64px;
+  height: 72px;
   padding: 0 40px;
-  background: #ffffff;
-  border-bottom: 1px solid #e8ecf1;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 16px rgba(95, 195, 228, 0.04);
   position: sticky;
   top: 0;
   z-index: 100;
 }
+
+/* ===== Logo ===== */
 .navbar-left {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
+
 .navbar-logo {
-  font-size: 20px;
-  font-weight: 700;
-  color: #667eea;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
   user-select: none;
-  letter-spacing: -0.5px;
+  padding: 6px 14px;
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
 }
+
 .navbar-logo:hover {
-  color: #764ba2;
+  background: rgba(95, 195, 228, 0.06);
+  transform: scale(1.02);
 }
+
+.logo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-gradient);
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(95, 195, 228, 0.25);
+}
+
+.logo-icon svg {
+  stroke: #fff;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.3px;
+}
+
+/* ===== 导航菜单 ===== */
 .navbar-center {
   flex: 1;
   display: flex;
   justify-content: center;
 }
-.navbar-menu {
-  border-bottom: none !important;
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.4);
+  padding: 4px;
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(8px);
 }
-.navbar-menu :deep(.el-menu-item) {
-  font-weight: 500;
-  color: #555;
-  border-bottom: 2px solid transparent;
-  transition: all 0.25s;
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  text-decoration: none;
 }
-.navbar-menu :deep(.el-menu-item:hover) {
-  color: #667eea;
+
+.nav-link .nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
 }
-.navbar-menu :deep(.el-menu-item.is-active) {
-  color: #667eea;
-  border-bottom-color: #667eea;
+
+.nav-link .nav-icon svg {
+  stroke: currentColor;
 }
-.navbar-menu :deep(.el-menu-item .el-icon) {
-  margin-right: 6px;
+
+.nav-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
 }
+
+.nav-link.active {
+  color: var(--primary-500);
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(95, 195, 228, 0.10);
+}
+
+.nav-link.active .nav-icon {
+  opacity: 1;
+}
+
+/* ===== 用户区域 ===== */
 .navbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-.navbar-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: default;
-}
-.navbar-user .username {
-  font-size: 14px;
-  color: #333;
-}
-.logout-btn {
-  color: #8c8f9c !important;
-  font-weight: 500 !important;
-  padding: 6px 12px !important;
-}
-.logout-btn:hover {
-  color: #f56c6c !important;
+  flex-shrink: 0;
+  position: relative;
 }
 
+.user-avatar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 6px 16px 6px 6px;
+  border-radius: var(--radius-full);
+  transition: all 0.2s ease;
+}
+
+.user-avatar-wrapper:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(95, 195, 228, 0.2);
+}
+
+.username {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.dropdown-arrow {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  transition: transform 0.25s ease;
+}
+
+.user-avatar-wrapper:hover .dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+/* ===== 下拉菜单 ===== */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  min-width: 170px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+  padding: 8px 0;
+  box-shadow: 0 16px 48px rgba(95, 195, 228, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: rgba(95, 195, 228, 0.06);
+  color: var(--primary-500);
+}
+
+.dropdown-item.text-danger {
+  color: #f5a0a0;
+}
+.dropdown-item.text-danger:hover {
+  background: rgba(245, 160, 160, 0.08);
+  color: #c47a7a;
+}
+
+.dropdown-item svg {
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.04);
+  margin: 4px 12px;
+}
+
+/* ===== 过渡 ===== */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.2s ease;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+}
+
+/* ============================================================
+   ===== 响应式 =====
+   ============================================================ */
 @media (max-width: 768px) {
-  .navbar { padding: 0 16px; }
-  .navbar-center { display: none; }
-  .navbar-logo { font-size: 16px; }
-  .navbar-user .username { display: none; }
+  .navbar {
+    padding: 0 16px;
+    height: 64px;
+  }
+
+  .navbar-center {
+    display: none;
+  }
+
+  .logo-text {
+    font-size: 16px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .logo-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .username {
+    display: none;
+  }
+
+  .dropdown-arrow {
+    display: none;
+  }
+
+  .user-avatar-wrapper {
+    padding: 4px;
+  }
 }
 </style>

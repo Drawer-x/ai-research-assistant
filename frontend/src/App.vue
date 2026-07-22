@@ -36,7 +36,6 @@ body {
   min-height: 100vh;
 }
 
-/* ===== 页面切换动画 ===== */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -50,7 +49,6 @@ body {
   transform: translateY(-12px);
 }
 
-/* ===== 滚动条美化 ===== */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -67,7 +65,6 @@ body {
   background: #a0a7b0;
 }
 
-/* ===== 按钮统一 ===== */
 .el-button {
   border-radius: 8px !important;
   font-weight: 500 !important;
@@ -82,7 +79,6 @@ body {
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.35);
 }
 
-/* ===== 输入框统一 ===== */
 .el-input__wrapper {
   border-radius: 10px !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
