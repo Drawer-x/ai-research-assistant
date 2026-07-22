@@ -32,6 +32,19 @@
         />
       </div>
 
+      <div class="input-group">
+        <label class="input-label">研究目标</label>
+        <el-input v-model="form.research_goal" placeholder="例如：完成课程论文和原型系统" :disabled="loading" />
+      </div>
+
+      <div class="input-group paper-selector">
+        <label class="input-label">关联论文</label>
+        <el-select v-model="form.paper_ids" multiple filterable clearable :loading="papersLoading" :disabled="loading" placeholder="选择当前文献库中的论文">
+          <el-option v-for="paper in availablePapers" :key="paper.id" :label="paper.title || `论文 ${paper.id}`" :value="paper.id" />
+        </el-select>
+        <p v-if="!papersLoading && availablePapers.length === 0" class="paper-empty">请先上传论文；也可以不关联论文直接生成计划。</p>
+      </div>
+
       <!-- 选项行 -->
       <div class="input-options">
         <div class="input-group">
@@ -189,21 +202,33 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from '../utils/axios'
+import { normalizePaperList, unwrapApiData } from '../utils/apiData'
 
 const router = useRouter()
 
 const form = reactive({
   topic: '',
+  research_goal: '',
   level: 'intermediate',
-  duration_weeks: 4
+  duration_weeks: 4,
+  paper_ids: []
 })
 
 const loading = ref(false)
 const plan = ref(null)
+const availablePapers = ref([])
+const papersLoading = ref(false)
+
+const loadPapers = async () => {
+  papersLoading.value = true
+  try { availablePapers.value = normalizePaperList(await axios.get('/api/papers')) }
+  catch (error) { availablePapers.value = []; ElMessage.error(error.response?.data?.message || '加载论文列表失败') }
+  finally { papersLoading.value = false }
+}
 
 const levels = [
   { value: 'beginner', label: '初级' },
@@ -223,22 +248,22 @@ const generatePlan = async () => {
   loading.value = true
   try {
     const res = await axios.post('/api/agent/research-plan', {
-      topic: form.topic.trim(),
-      level: form.level,
-      duration_weeks: form.duration_weeks
+      research_topic: form.topic.trim(),
+      research_goal: form.research_goal.trim(),
+      current_level: form.level,
+      duration_weeks: form.duration_weeks,
+      paper_ids: form.paper_ids.map(Number).filter(Number.isInteger)
     })
 
     if (res.data.code === 200 || res.data.code === 0) {
-      plan.value = res.data.data || res.data
+      plan.value = unwrapApiData(res)
       ElMessage.success('科研计划生成成功')
     } else {
       ElMessage.error(res.data.message || '生成失败')
-      loadMockPlan()
     }
   } catch (error) {
     console.error('生成计划失败:', error)
-    loadMockPlan()
-    ElMessage.warning('使用示例数据展示效果')
+    ElMessage.error(error.response?.data?.message || '生成计划失败')
   } finally {
     loading.value = false
   }
@@ -351,6 +376,8 @@ const copyPlan = () => {
     ElMessage.warning('复制失败')
   })
 }
+
+onMounted(loadPapers)
 </script>
 
 <style scoped>
@@ -449,6 +476,9 @@ const copyPlan = () => {
   color: #4a5a6a;
   margin-bottom: 8px;
 }
+
+.paper-selector :deep(.el-select) { width: 100%; }
+.paper-empty { margin-top: 8px; color: #8c9aa8; font-size: 13px; }
 
 .input-textarea :deep(.el-textarea__inner) {
   min-height: 80px;

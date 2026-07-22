@@ -91,7 +91,7 @@
 
     <!-- ===== 图表 ===== -->
     <div class="graph-wrapper">
-      <div ref="chartRef" class="graph-chart"></div>
+      <div ref="chartRef" class="graph-chart" data-testid="graph-chart" data-chart-ready="false"></div>
       <div v-if="loading" class="graph-loading">
         <div class="loading-spinner"></div>
         <span>加载图谱数据...</span>
@@ -153,7 +153,7 @@
         </button>
       </div>
       <div class="drawer-body" v-if="selectedNode">
-        <h2 class="node-title">{{ selectedNode.label || selectedNode.name }}</h2>
+        <h2 class="node-title">{{ selectedNode.displayLabel || selectedNode.label || selectedNode.name }}</h2>
         <div class="node-meta">
           <p><span class="meta-label">作者</span>{{ selectedNode.authors || '未知' }}</p>
           <p><span class="meta-label">年份</span>{{ selectedNode.year || '未知' }}</p>
@@ -199,10 +199,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import axios from '../utils/axios'
+import { normalizeGraphData } from '../utils/apiData'
 
 const router = useRouter()
 const chartRef = ref(null)
 let chartInstance = null
+let resizeObserver = null
 
 // ===== 状态 =====
 const loading = ref(false)
@@ -227,18 +229,20 @@ const loadGraphData = async () => {
   try {
     const res = await axios.get('/api/graph/papers')
     if (res.data.code === 200 || res.data.code === 0) {
-      const data = res.data.data || res.data
-      nodes.value = data.nodes || []
-      edges.value = data.edges || []
+      const data = normalizeGraphData(res)
+      nodes.value = data.nodes
+      edges.value = data.edges
       if (nodes.value.length === 0) {
         ElMessage.info('暂无关系数据，点击「生成图谱」创建')
       }
     } else {
-      loadMockData()
+      nodes.value = []; edges.value = []
+      ElMessage.error(res.data.message || '加载关系图失败')
     }
   } catch (error) {
-    console.warn('加载图谱数据失败，使用示例数据:', error)
-    loadMockData()
+    console.warn('加载图谱数据失败:', error)
+    nodes.value = []; edges.value = []
+    ElMessage.error(error.response?.data?.message || '加载关系图失败')
   } finally {
     loading.value = false
     await nextTick()
@@ -255,41 +259,14 @@ const generateGraph = async () => {
       ElMessage.success('图谱生成成功')
       await loadGraphData()
     } else {
-      loadMockData()
-      await nextTick()
-      renderChart()
-      ElMessage.warning('使用示例数据展示图谱效果')
+      ElMessage.error(res.data.message || '生成关系图失败')
     }
   } catch (error) {
-    console.warn('生成图谱失败，使用示例数据:', error)
-    loadMockData()
-    await nextTick()
-    renderChart()
-    ElMessage.warning('使用示例数据展示图谱效果')
+    console.warn('生成图谱失败:', error)
+    ElMessage.error(error.response?.data?.message || '生成关系图失败')
   } finally {
     generating.value = false
   }
-}
-
-// ===== Mock 数据 =====
-const loadMockData = () => {
-  nodes.value = [
-    { id: 1, label: 'Attention Is All You Need', authors: 'Vaswani et al.', year: '2017', status: '已读', tags: ['Transformer', 'NLP'], category: 0 },
-    { id: 2, label: 'BERT', authors: 'Devlin et al.', year: '2018', status: '在读', tags: ['BERT', '预训练'], category: 0 },
-    { id: 3, label: 'GPT-3', authors: 'Brown et al.', year: '2020', status: '未读', tags: ['GPT', '大语言模型'], category: 0 },
-    { id: 4, label: 'ResNet', authors: 'He et al.', year: '2016', status: '已读', tags: ['CNN', 'CV'], category: 1 },
-    { id: 5, label: 'GAN', authors: 'Goodfellow et al.', year: '2014', status: '在读', tags: ['生成模型', 'CV'], category: 1 },
-    { id: 6, label: 'CLIP', authors: 'Radford et al.', year: '2021', status: '未读', tags: ['多模态', 'CV'], category: 1 }
-  ]
-  edges.value = [
-    { source: 1, target: 2, type: '引用', category: 0 },
-    { source: 1, target: 3, type: '引用', category: 0 },
-    { source: 2, target: 3, type: '方法相似', category: 2 },
-    { source: 1, target: 4, type: '主题相似', category: 1 },
-    { source: 4, target: 5, type: '引用', category: 0 },
-    { source: 4, target: 6, type: '主题相似', category: 1 },
-    { source: 5, target: 6, type: '方法相似', category: 2 }
-  ]
 }
 
 // ===== 渲染图表 =====
@@ -322,7 +299,7 @@ const renderChart = () => {
       formatter: (params) => {
         if (params.dataType === 'node') {
           const d = params.data
-          return `<strong>${d.label}</strong><br/>作者：${d.authors || '未知'}<br/>年份：${d.year || '未知'}`
+          return `<strong>${d.displayLabel}</strong><br/>作者：${d.authors || '未知'}<br/>年份：${d.year || '未知'}`
         }
         const edge = edges.value.find(e => e.source === params.data.source && e.target === params.data.target)
         return `${params.data.source} → ${params.data.target}<br/>类型：${edge?.type || '关联'}`
@@ -349,7 +326,9 @@ const renderChart = () => {
       draggable: true,
       data: nodes.value.map((node, idx) => ({
         ...node,
-        symbolSize: 35 + Math.random() * 30,
+        displayLabel: node.label,
+        category: Number.isInteger(node.category) ? node.category : idx % categoryNames.length,
+        symbolSize: 48,
         itemStyle: {
           color: colors[idx % colors.length],
           shadowBlur: 12,
@@ -361,14 +340,14 @@ const renderChart = () => {
           fontWeight: 500,
           color: '#4a5a6a',
           offset: [0, 8],
-          formatter: (p) => p.data.label?.length > 15 ? p.data.label.slice(0, 15) + '...' : p.data.label
+          formatter: (p) => p.data.displayLabel?.length > 15 ? p.data.displayLabel.slice(0, 15) + '...' : p.data.displayLabel
         }
       })),
       links: edges.value.map(edge => ({
         ...edge,
         label: {
           show: true,
-          formatter: edge.type || '关联',
+          formatter: `${edge.type || '关联'} ${edge.weight ? edge.weight.toFixed(2) : ''}`,
           fontSize: 10,
           color: '#8c9aa8',
           offset: [0, -8]
@@ -394,6 +373,9 @@ const renderChart = () => {
   }
 
   chartInstance.setOption(option, true)
+  chartRef.value.dataset.chartReady = 'true'
+  chartRef.value.dataset.graphNodes = String(nodes.value.length)
+  chartRef.value.dataset.graphEdges = String(edges.value.length)
   chartInstance.resize()
 
   chartInstance.off('click')
@@ -404,6 +386,13 @@ const renderChart = () => {
       showDetail.value = true
     }
   })
+
+  if (import.meta.env.DEV) {
+    Object.defineProperty(chartRef.value, '__echartsInstance', {
+      value: chartInstance,
+      configurable: true,
+    })
+  }
 }
 
 // ===== 切换布局 =====
@@ -435,7 +424,8 @@ const getNodeName = (id) => {
 
 const goToDetail = (id) => {
   showDetail.value = false
-  router.push(`/papers/${id}`)
+  const node = nodes.value.find(item => item.id === String(id))
+  router.push(`/papers/${node?.paper_id || id}`)
 }
 
 // ===== 窗口自适应 =====
@@ -450,14 +440,20 @@ watch(showLabels, () => renderChart())
 onMounted(() => {
   loadGraphData()
   window.addEventListener('resize', handleResize)
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(handleResize)
+    if (chartRef.value) resizeObserver.observe(chartRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  resizeObserver?.disconnect()
   if (chartInstance) {
     chartInstance.dispose()
     chartInstance = null
   }
+  if (chartRef.value) delete chartRef.value.__echartsInstance
 })
 </script>
 

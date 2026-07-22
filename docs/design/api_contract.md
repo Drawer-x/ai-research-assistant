@@ -1,6 +1,6 @@
-# Sprint 1–2 后端 API 契约
+# Sprint 1–3 后端 API 契约
 
-本文档定义 AI 驱动科研文献分析平台 Sprint 1/2 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答、多论文对比和 Agent 科研规划可调用成员 B 的 service；未配置 `ECNU_API_KEY`、远端调用失败、结构化返回非法或 RAG 数据不可用时自动降级为稳定 fallback。关系图边仅使用数据库已有关系。
+本文档定义 AI 驱动科研文献分析平台 Sprint 1–3 的联调接口。服务基址默认为 `http://127.0.0.1:8000`，交互文档位于 `/docs`。AI 总结、论文问答、多论文对比、关系生成和 Agent 科研规划通过 adapter 调用对应 service；未配置 `ECNU_API_KEY`、远端调用失败、结构化返回非法或 RAG 数据不可用时自动降级为稳定 fallback。生成的关系、AI 历史与计划均持久化并按用户隔离。
 
 ## 统一响应
 
@@ -56,9 +56,9 @@ Content-Type: application/json
 | POST | `/api/papers/{paper_id}/tags` | 是 | 添加或自动创建标签 |
 | DELETE | `/api/papers/{paper_id}/tags/{tag_id}` | 是 | 移除论文标签 |
 | POST | `/api/papers/{paper_id}/summary` | 是 | 生成并保存结构化总结（AI 或 fallback） |
-| POST | `/api/papers/{paper_id}/qa` | 是 | mock 论文问答 |
+| POST | `/api/papers/{paper_id}/qa` | 是 | 真实 AI 或 fallback 论文问答 |
 | GET | `/api/graph/papers` | 是 | ECharts Graph 节点和关系边 |
-| POST | `/api/agent/research-plan` | 是 | 生成并保存 mock 科研规划 |
+| POST | `/api/agent/research-plan` | 是 | 生成并保存真实 AI 或 fallback 科研规划 |
 | GET | `/api/papers/{paper_id}/summaries` | 是 | 查询当前用户论文的总结历史 |
 | GET | `/api/papers/{paper_id}/qa-records` | 是 | 查询当前用户论文的问答历史 |
 | POST | `/api/papers/compare` | 是 | 对比至少两篇当前用户的论文 |

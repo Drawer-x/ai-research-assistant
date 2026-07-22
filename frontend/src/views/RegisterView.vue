@@ -102,6 +102,7 @@
 
           <el-form-item>
             <button
+              type="button"
               class="register-btn"
               :disabled="loading"
               @click="handleRegister"

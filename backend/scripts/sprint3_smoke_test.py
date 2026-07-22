@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import requests
+import fitz
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import settings
@@ -72,15 +73,46 @@ def create_user(client: SmokeClient, suffix: str) -> None:
     client.session.headers["Authorization"] = f"Bearer {login['token']}"
 
 
+def write_test_pdf(path: Path, title: str, body: str) -> None:
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_textbox(
+        fitz.Rect(50, 50, 545, 790),
+        f"{title}\n\n{body}",
+        fontsize=11,
+    )
+    document.set_metadata({"title": title, "author": "Sprint 3 integration test"})
+    document.save(path)
+    document.close()
+
+
 def run(base_url: str, request_timeout: float) -> None:
     owner = SmokeClient(base_url, request_timeout)
     owner.request("GET", "/api/health", "健康检查")
     create_user(owner, "owner")
     paper_ids = []
     with tempfile.TemporaryDirectory(prefix="sprint3-") as temp_dir:
-        for number in range(1, 4):
+        fixtures = [
+            (
+                "RAG Transformer Foundations",
+                "Retrieval augmented generation with Transformer embeddings. "
+                "This paper studies vector retrieval and attention for academic research.",
+            ),
+            (
+                "RAG Transformer Evaluation",
+                "We evaluate retrieval augmented generation with Transformer embeddings "
+                "and vector retrieval. References: RAG Transformer Foundations.",
+            ),
+            (
+                "RAG Transformer Applications",
+                "Academic research applications use retrieval augmented generation, "
+                "Transformer attention, embeddings, and vector retrieval. "
+                "References: RAG Transformer Evaluation.",
+            ),
+        ]
+        for number, (title, body) in enumerate(fixtures, start=1):
             path = Path(temp_dir) / f"paper-{number}.pdf"
-            path.write_bytes(b"%PDF-1.4\nSprint 3 smoke\n%%EOF")
+            write_test_pdf(path, title, body)
             with path.open("rb") as source:
                 paper = owner.request("POST", "/api/papers/upload", f"上传论文 {number}",
                     files={"file": (path.name, source, "application/pdf")})
@@ -88,9 +120,12 @@ def run(base_url: str, request_timeout: float) -> None:
     papers = owner.request("GET", "/api/papers", "论文列表")
     assert set(paper_ids) <= {paper["paper_id"] for paper in papers}
     generated = owner.request("POST", "/api/graph/generate", "生成关系图", json={
-        "paper_ids": paper_ids, "relation_types": ["topic_similarity", "method_similarity"],
+        "paper_ids": paper_ids,
+        "relation_types": ["citation", "topic_similarity", "method_similarity"],
         "force_regenerate": False})
     assert len(generated["nodes"]) >= 3 and generated["edges"]
+    relation_types = {edge["relation_type"] for edge in generated["edges"]}
+    assert {"citation", "topic_similarity", "method_similarity"} <= relation_types
     graph = owner.request("GET", "/api/graph/papers", "查询关系图")
     assert graph["nodes"] and graph["edges"]
     owner.request("GET", "/api/graph/relations", "查询关系列表")

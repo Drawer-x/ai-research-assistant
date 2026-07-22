@@ -29,7 +29,7 @@ npm install
 npm run dev
 ```
 
-打开终端显示的地址（默认 http://localhost:5173）。开发服务器会把 `/api` 代理到 `http://127.0.0.1:8000`。
+打开终端显示的地址（默认 http://localhost:5173）。开发服务器默认把 `/api` 代理到 `http://127.0.0.1:8000`；联调 8769 后端时可先设置 `VITE_PROXY_TARGET=http://127.0.0.1:8769`。后端 CORS 同时允许本地 5173 和 5174。
 
 ## 联调顺序
 
@@ -41,3 +41,10 @@ npm run dev
 6. 打开关系图和 Agent 科研规划页面。
 
 接口契约见 `docs/design/api_contract.md`，目录说明见 `docs/design/project_structure.md`。
+
+完整自动化联调（后端启动后执行）：
+
+```bash
+cd backend
+.venv\Scripts\python.exe scripts\final_integration_test.py --base-url http://127.0.0.1:8769 --request-timeout 120
+```

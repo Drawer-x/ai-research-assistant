@@ -22,7 +22,7 @@ Swagger: http://127.0.0.1:8000/docs
 
 数据库默认创建为 `backend/ai_research_assistant.db`，上传文件保存到 `backend/uploads/{user_id}/`；两者均被根目录 `.gitignore` 忽略。
 
-本地 Vue 开发服务器的 `http://localhost:5173` 和 `http://127.0.0.1:5173` 已加入 CORS 白名单。
+本地 Vue 开发服务器的 5173 与 5174 端口（`localhost` 和 `127.0.0.1`）已加入 CORS 白名单。
 
 ## 快速联调
 
@@ -107,3 +107,11 @@ python scripts/sprint3_smoke_test.py --base-url http://127.0.0.1:8769 --request-
 ```
 
 脚本默认读取统一配置，将 read timeout 设为 `max(120, ECNU_API_TIMEOUT_SECONDS + 30)`，连接超时为 10 秒。真实 Agent 调用使用 `(10, ECNU_API_TIMEOUT_SECONDS)` 的连接/读取超时；模型超时、连接失败或返回非法时，后端会在有界等待后保存并返回完整 fallback 计划。
+
+最终全链路测试覆盖认证、三篇临时 PDF、文献 CRUD、标签、总结/QA/对比历史、Graph、Agent 与双用户隔离：
+
+```bash
+python scripts/final_integration_test.py --base-url http://127.0.0.1:8769 --request-timeout 120
+```
+
+测试成功输出 `FINAL_INTEGRATION_TEST_OK`；脚本不打印 token、Key、完整正文或 Prompt，并会清理其上传的临时论文。

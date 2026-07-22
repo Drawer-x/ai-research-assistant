@@ -94,6 +94,7 @@
 
           <el-form-item>
             <button
+              type="button"
               class="login-btn"
               :disabled="loading"
               @click="handleLogin"
@@ -117,6 +118,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from '../utils/axios'
+import { setAuthFromLogin } from '../utils/authState'
 
 const router = useRouter()
 const loginFormRef = ref(null)
@@ -157,7 +159,7 @@ const handleLogin = async () => {
 
     if (res.data.code === 200 || res.data.code === 0) {
       ElMessage.success('登录成功')
-      localStorage.setItem('token', res.data.data.access_token || res.data.data.token)
+      setAuthFromLogin(res)
       if (rememberMe.value) {
         localStorage.setItem('remember_me', 'true')
       }

@@ -183,16 +183,7 @@ const loading = ref(false)
 const compareLoading = ref(false)
 const compareIsMock = ref(false)
 
-// ===== 固定的 5 篇 Mock 论文 =====
-const mockPapers = [
-  { id: 1, title: 'Attention Is All You Need', authors: 'Vaswani et al.', year: '2017', tags: ['Transformer'] },
-  { id: 2, title: 'BERT: Pre-training of Deep Bidirectional Transformers', authors: 'Devlin et al.', year: '2018', tags: ['BERT'] },
-  { id: 3, title: 'GPT-3: Language Models are Few-Shot Learners', authors: 'Brown et al.', year: '2020', tags: ['GPT'] },
-  { id: 4, title: 'ResNet: Deep Residual Learning', authors: 'He et al.', year: '2016', tags: ['CNN'] },
-  { id: 5, title: 'GAN: Generative Adversarial Nets', authors: 'Goodfellow et al.', year: '2014', tags: ['GAN'] }
-]
-
-// ===== 获取论文列表（合并真实 + Mock） =====
+// ===== 获取当前用户的真实论文列表 =====
 const loadPapers = async () => {
   loading.value = true
   try {
@@ -207,29 +198,19 @@ const loadPapers = async () => {
         tags: item.tags || []
       }))
       
-      // 合并：真实论文 + Mock 论文（去重）
-      const realIds = new Set(realPapers.map(p => p.id))
-      const merged = [...realPapers]
-      mockPapers.forEach(m => {
-        if (!realIds.has(m.id)) {
-          merged.push(m)
-        }
-      })
-      allPapers.value = merged
+      allPapers.value = realPapers
       
       if (allPapers.value.length === 0) {
         ElMessage.info('暂无文献')
       }
     } else {
-      // 接口失败，直接使用 Mock
-      allPapers.value = [...mockPapers]
-      ElMessage.warning('加载失败，使用示例数据')
+      allPapers.value = []
+      ElMessage.error(res.data.message || '加载论文列表失败')
     }
   } catch (error) {
     console.error('加载论文列表失败:', error)
-    // 接口异常，使用 Mock
-    allPapers.value = [...mockPapers]
-    ElMessage.warning('网络异常，使用示例数据')
+    allPapers.value = []
+    ElMessage.error(error.response?.data?.message || '加载论文列表失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -289,47 +270,19 @@ const generateCompare = async () => {
         return
       }
     }
-    // 接口返回格式异常，使用 Mock
-    generateMockCompare()
+    compareResult.value = null
+    ElMessage.error(res.data.message || '对比结果格式无效')
   } catch (error) {
     console.error('对比失败:', error)
     if (error.response?.status === 422) {
-      ElMessage.warning('接口参数错误，使用示例数据')
+      ElMessage.error(error.response?.data?.message || '对比参数错误')
     } else {
-      ElMessage.warning('接口调用失败，使用示例数据')
+      ElMessage.error(error.response?.data?.message || '对比生成失败，请稍后重试')
     }
-    generateMockCompare()
+    compareResult.value = null
   } finally {
     compareLoading.value = false
   }
-}
-
-// ===== Mock 对比数据 =====
-const generateMockCompare = () => {
-  compareIsMock.value = true
-  const topics = ['Transformer 架构研究', '预训练语言模型', '大规模语言模型', '残差网络优化', '生成对抗网络']
-  const methods = ['Multi-Head Attention', 'Masked LM', 'Few-shot Learning', 'Residual Learning', 'Adversarial Training']
-  const datasets = ['WMT 2014', 'BookCorpus', 'Common Crawl', 'ImageNet', 'MNIST']
-  const results = ['BLEU 28.4', 'SOTA on GLUE', '175B parameters', 'Top-5 Error 3.57%', 'Realistic Image Generation']
-  const limitations = ['长序列计算量大', '预训练成本高', '推理延迟大', '需要大量标注数据', '训练不稳定']
-
-  const selectedPapers = allPapers.value.filter(p => selectedIds.value.includes(p.id))
-  compareResult.value = selectedPapers.map((p, i) => ({
-    paper: p.title,
-    problem: topics[i % topics.length],
-    method: methods[i % methods.length],
-    dataset: datasets[i % datasets.length],
-    result: results[i % results.length],
-    limitation: limitations[i % limitations.length]
-  }))
-  
-  if (!compareResult.value || compareResult.value.length === 0) {
-    compareResult.value = [
-      { paper: '论文 A', problem: '示例问题', method: '示例方法', dataset: '示例数据集', result: '示例结果', limitation: '示例局限性' },
-      { paper: '论文 B', problem: '示例问题', method: '示例方法', dataset: '示例数据集', result: '示例结果', limitation: '示例局限性' }
-    ]
-  }
-  ElMessage.info('使用示例数据展示对比效果')
 }
 
 // ===== 生成综述大纲 =====

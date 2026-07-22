@@ -145,6 +145,12 @@
             <span v-for="tag in paper.tags" :key="tag" class="tag">#{{ tag }}</span>
           </div>
         </div>
+        <div class="paper-actions">
+          <button class="paper-delete" :disabled="deletingIds.has(paper.id)" @click.stop="deletePaper(paper)">
+            {{ deletingIds.has(paper.id) ? '删除中...' : '删除' }}
+          </button>
+          <button class="paper-view" @click="goToDetail(paper.id)">查看</button>
+        </div>
         <div class="paper-arrow" @click="goToDetail(paper.paper_id || paper.id)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -190,7 +196,7 @@
         <el-upload
           ref="uploadRef"
           drag
-          action="/api/papers/upload"
+          :action="uploadUrl"
           :headers="uploadHeaders"
           :on-success="onUploadSuccess"
           :on-error="onUploadError"
@@ -218,7 +224,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from '../utils/axios'
 
 const router = useRouter()
@@ -227,10 +233,15 @@ const papers = ref([])
 const searchKeyword = ref('')
 const showUpload = ref(false)
 const uploadRef = ref(null)
+const deletingIds = ref(new Set())
 
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${localStorage.getItem('token') || ''}`
 }))
+const uploadUrl = computed(() => {
+  const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  return `${base}/api/papers/upload`
+})
 
 // ===== 状态映射 =====
 const displayStatusMap = {
@@ -330,47 +341,35 @@ const loadPapers = async () => {
         id: item.paper_id || item.id
       }))
     } else {
-      loadMockPapers()
+      papers.value = []
+      ElMessage.error(res.data.message || '加载文献列表失败')
     }
   } catch (error) {
-    console.warn('加载文献列表失败，使用示例数据:', error)
-    loadMockPapers()
+    console.warn('加载文献列表失败:', error)
+    papers.value = []
+    ElMessage.error(error.response?.data?.message || '加载文献列表失败，请稍后重试')
   }
 }
 
-const loadMockPapers = () => {
-  papers.value = [
-    {
-      id: 1,
-      paper_id: 1,
-      title: 'Attention Is All You Need',
-      authors: 'Vaswani et al.',
-      year: '2017',
-      status: 'intensive_read',
-      tags: ['Transformer', 'NLP'],
-      created_at: '2026-07-10T10:00:00'
-    },
-    {
-      id: 2,
-      paper_id: 2,
-      title: 'BERT: Pre-training of Deep Bidirectional Transformers',
-      authors: 'Devlin et al.',
-      year: '2018',
-      status: 'rough_read',
-      tags: ['BERT', '预训练'],
-      created_at: '2026-07-11T14:30:00'
-    },
-    {
-      id: 3,
-      paper_id: 3,
-      title: 'GPT-3: Language Models are Few-Shot Learners',
-      authors: 'Brown et al.',
-      year: '2020',
-      status: 'unread',
-      tags: ['GPT', '大语言模型'],
-      created_at: '2026-07-12T09:15:00'
-    }
-  ]
+const deletePaper = async (paper) => {
+  const id = Number(paper.id ?? paper.paper_id)
+  if (!Number.isInteger(id) || id <= 0 || deletingIds.value.has(id)) return
+  try {
+    await ElMessageBox.confirm(`确认删除“${paper.title || '该论文'}”吗？`, '删除论文', { type: 'warning' })
+  } catch { return }
+  deletingIds.value.add(id)
+  deletingIds.value = new Set(deletingIds.value)
+  try {
+    const res = await axios.delete(`/api/papers/${id}`)
+    if (res.data.code !== 200 && res.data.code !== 0) throw new Error(res.data.message || '删除失败')
+    papers.value = papers.value.filter(item => Number(item.id ?? item.paper_id) !== id)
+    ElMessage.success('论文已删除')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || error.message || '删除失败')
+  } finally {
+    deletingIds.value.delete(id)
+    deletingIds.value = new Set(deletingIds.value)
+  }
 }
 
 const onUploadSuccess = (response) => {
@@ -746,6 +745,12 @@ onMounted(() => {
   transition: color 0.2s ease;
   flex-shrink: 0;
 }
+
+.paper-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.paper-actions button { padding: 6px 12px; border-radius: var(--radius-full); cursor: pointer; }
+.paper-view { border: 1px solid rgba(95,195,228,.3); color: var(--primary-500); background: white; }
+.paper-delete { border: 1px solid rgba(220,80,80,.25); color: #c45f5f; background: rgba(245,160,160,.08); }
+.paper-delete:disabled { opacity: .55; cursor: wait; }
 
 .paper-arrow svg {
   stroke: currentColor;

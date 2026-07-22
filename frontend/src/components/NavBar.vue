@@ -34,7 +34,7 @@
     <div class="navbar-right">
       <div class="user-avatar-wrapper" @click="toggleDropdown">
         <span class="user-avatar">{{ userInitial }}</span>
-        <span class="username">{{ username || '用户' }}</span>
+        <span class="username" :title="username">{{ username || '用户' }}</span>
         <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -70,10 +70,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { authState, clearAuth, loadCurrentUser } from '../utils/authState'
 
 const router = useRouter()
 const route = useRoute()
-const username = ref('')
+const username = computed(() => authState.user?.username || '')
 const showDropdown = ref(false)
 
 const menuItems = [
@@ -101,8 +102,7 @@ const goToPlans = () => {
 
 const handleLogout = () => {
   showDropdown.value = false
-  localStorage.removeItem('token')
-  localStorage.removeItem('username')
+  clearAuth()
   ElMessage.success('已退出登录')
   router.push('/login')
 }
@@ -113,8 +113,8 @@ const handleClickOutside = (e) => {
   }
 }
 
-onMounted(() => {
-  username.value = localStorage.getItem('username') || '用户'
+onMounted(async () => {
+  try { await loadCurrentUser() } catch { clearAuth() }
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -292,6 +292,10 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 600;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dropdown-arrow {
