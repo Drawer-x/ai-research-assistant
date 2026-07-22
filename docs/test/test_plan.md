@@ -74,6 +74,17 @@ AI Research Assistant 是一个面向学生和科研人员的文献分析平台�
 | 编写基础测试用例  | 已完成  |
 | 更新测试报告|已完成 |
 
+---
+
+### Sprint 3：关系图、Agent、测试部署与最终展示
+
+| 任务 | 状态 |
+|------|------|
+| 关系图接口测试 | 已完成 |
+| 编写测试计划  | 已完成  |
+| 编写基础测试用例  | 已完成  |
+| 更新测试报告|已完成 |
+
 ## 4. 质量目标
 
 | 指标 | 目标值 | 
@@ -88,6 +99,6 @@ AI Research Assistant 是一个面向学生和科研人员的文献分析平台�
 ## 5. 交付物
 
 - 测试计划文档（本文档）
-- 测试用例清单（test_cases_sprint1.md,test_cases_sprint2.md）
+- 测试用例清单（test_cases_sprint1.md,test_cases_sprint2.md,test_cases_sprint3.md）
 
 
