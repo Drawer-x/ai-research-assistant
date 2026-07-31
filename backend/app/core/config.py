@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     ai_max_prompt_chars: int = 20_000
     embedding_batch_size: int = 64
     embedding_max_input_chars: int = 8_000
+    s2_api_key: str | None = None
+    s2_graph_base_url: str = "https://api.semanticscholar.org/graph/v1"
+    s2_recommendations_base_url: str = "https://api.semanticscholar.org/recommendations/v1"
+    s2_connect_timeout_seconds: float = 10
+    s2_read_timeout_seconds: float = 30
+    s2_max_retries: int = 1
+    s2_min_request_interval_seconds: float = 1.0
 
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 
