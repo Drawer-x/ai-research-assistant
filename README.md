@@ -48,3 +48,6 @@ npm run dev
 cd backend
 .venv\Scripts\python.exe scripts\final_integration_test.py --base-url http://127.0.0.1:8769 --request-timeout 120
 ```
+# Sprint 4 backend integration
+
+The `feature/backend` implementation adds backend discovery/import, recommendation adapter contracts, and enhanced graph APIs. Member B's final ranking/relation algorithms and member C's Vue work remain separate; the backend uses explicitly marked, evidence-preserving fallbacks until B's functions are available.

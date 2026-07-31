@@ -5,10 +5,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models
-from app.api import agent, auth, graph, papers
+from app.api import agent, auth, discovery, graph, papers, recommendations
 from app.core.config import settings
 from app.core.response import error_response, success_response
 from app.database import Base, engine
+from app.services.semantic_scholar_client import AuthenticationRequiredError, RateLimitedError, SemanticScholarError, SemanticScholarNotFound, UpstreamTimeoutError
 
 
 @asynccontextmanager
@@ -50,7 +51,24 @@ def health():
     return success_response(message="backend is running")
 
 
+@app.exception_handler(SemanticScholarNotFound)
+async def s2_not_found(request: Request, exc: SemanticScholarNotFound): return error_response(str(exc),404)
+@app.exception_handler(SemanticScholarError)
+async def s2_unavailable(request: Request, exc: SemanticScholarError): return error_response("External paper service unavailable",503)
+@app.exception_handler(RateLimitedError)
+async def s2_limited(request: Request, exc: RateLimitedError): return error_response("External paper service requests are too frequent",429)
+@app.exception_handler(AuthenticationRequiredError)
+async def s2_auth_required(request: Request, exc: AuthenticationRequiredError): return error_response("The current public endpoint requires authentication",503)
+@app.exception_handler(UpstreamTimeoutError)
+async def s2_timeout(request: Request, exc: UpstreamTimeoutError): return error_response("External paper service is temporarily unavailable",503)
+@app.exception_handler(LookupError)
+async def lookup_error(request: Request, exc: LookupError): return error_response(str(exc),404)
+@app.exception_handler(ValueError)
+async def value_error(request: Request, exc: ValueError): return error_response(str(exc),422)
+
 app.include_router(auth.router, prefix="/api")
 app.include_router(papers.router, prefix="/api")
 app.include_router(graph.router, prefix="/api")
 app.include_router(agent.router, prefix="/api")
+app.include_router(discovery.router, prefix="/api")
+app.include_router(recommendations.router, prefix="/api")

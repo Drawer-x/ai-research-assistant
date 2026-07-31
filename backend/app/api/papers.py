@@ -23,6 +23,7 @@ from app.services.ai_adapter_service import safe_answer_question, safe_compare_p
 from app.services.paper_service import get_owned_paper, paper_with_relations, serialize_paper
 from app.services.pdf_parser import extract_text_from_pdf
 from app.services.text_splitter import split_text
+from app.services.paper_content_service import PaperContentUnavailable, get_paper_analysis_content
 
 router = APIRouter(tags=["文献与标签"])
 logger = logging.getLogger(__name__)
@@ -290,7 +291,9 @@ def remove_tag(paper_id: int, tag_id: int, db: Session = Depends(get_db), curren
 def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
-    result = safe_generate_summary(paper.full_text or "")
+    try: content = get_paper_analysis_content(db, paper, current_user.id)
+    except PaperContentUnavailable as exc: return error_response(str(exc), 422)
+    result = safe_generate_summary(content["text"])
     summary = result["summary"]
     is_mock = result["is_mock"]
     model_name = result["model_name"]
@@ -314,6 +317,7 @@ def create_summary(paper_id: int, db: Session = Depends(get_db), current_user: U
         "summary": summary,
         "is_mock": is_mock,
         "model_name": model_name,
+        "analysis_scope": content["analysis_scope"],
     })
 
 
@@ -345,9 +349,11 @@ def summary_history(paper_id: int, db: Session = Depends(get_db), current_user: 
 def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
+    try: content = get_paper_analysis_content(db, paper, current_user.id)
+    except PaperContentUnavailable as exc: return error_response(str(exc), 422)
     result = safe_answer_question(
         payload.question,
-        paper.full_text or "",
+        content["text"],
         paper_id=paper.id,
         user_id=current_user.id,
     )
@@ -368,7 +374,7 @@ def paper_qa(paper_id: int, payload: QARequest, db: Session = Depends(get_db), c
         db.rollback()
         logger.error("论文 %s 的问答记录保存失败（%s）", paper.id, type(exc).__name__)
         return error_response("论文问答成功，但保存失败", 500)
-    return success_response({**result, "qa_record_id": record.id})
+    return success_response({**result, "qa_record_id": record.id, "analysis_scope": content["analysis_scope"]})
 
 
 @router.get("/papers/{paper_id}/qa-records", tags=["AI 阅读"])

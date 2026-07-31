@@ -49,3 +49,8 @@ class GraphEdge(BaseModel):
     weight: float | None = None
     description: str | None = None
     is_mock: bool = False
+
+class GraphExpandRequest(BaseModel):
+    node_id: str
+    expand_type: str
+    limit: int = Field(10, ge=1, le=50)
