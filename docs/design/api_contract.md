@@ -241,3 +241,6 @@ generate_research_plan(research_topic: str, research_goal: str, duration_weeks: 
 ```
 
 Adapter 同时兼容当前 Sprint 1 实际签名 `generate_research_plan(topic, level, duration_weeks)`，并兼容名称 `create_research_plan`、`generate_agent_plan`。真实 service 缺失、异常或完全非法时，返回按周数生成的稳定 fallback，`is_mock=true`。
+# Sprint 4 additions
+
+Authenticated discovery routes are `/api/discovery/search`, `/api/discovery/papers/{external_id}`, and `/api/discovery/import`. Recommendation routes are `/api/recommendations/by-paper`, `/for-library`, `/by-topic`, the history collection, and its `/{id}/status` and `/{id}/import` actions. Enhanced graph routes are `/api/graph/enhanced`, `/expand`, and `/relation-types`. All retain the standard `{code,message,data}` envelope; the complete request/response and member integration contract is in `sprint4_backend_contract.md`.
