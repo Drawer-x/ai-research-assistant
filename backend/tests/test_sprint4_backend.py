@@ -48,5 +48,6 @@ class Sprint4ClientTests(unittest.TestCase):
         with self.assertRaises(UpstreamUnavailableError):c.search_papers("error")
         c.search_papers("error");self.assertEqual(s.request.call_count,3)
     def test_normalizers_and_fallback_real_candidates(self):
-        p=normalize_paper({"paperId":"x","title":" A  title ","externalIds":{"DOI":"doi:10.X/Y"}});self.assertEqual(p["doi"],"10.x/y");candidates=[p];r=recommend_by_topic("x",candidates,None,None,1);self.assertIs(r["items"][0]["paper"],p);self.assertTrue(r["items"][0]["is_fallback"]);self.assertIn("Academic Graph",r["items"][0]["reasons"][0])
+        # Member B algorithm is present: adapter should return scored items with is_fallback=false.
+        p=normalize_paper({"paperId":"x","title":" A  title ","externalIds":{"DOI":"doi:10.X/Y"}});self.assertEqual(p["doi"],"10.x/y");candidates=[p];r=recommend_by_topic("x",candidates,None,None,1);self.assertIs(r["items"][0]["paper"],p);self.assertFalse(r["items"][0]["is_fallback"]);self.assertTrue(0<=r["items"][0]["score"]<=1);self.assertTrue(r["items"][0]["reasons"])
 if __name__=="__main__":unittest.main()
