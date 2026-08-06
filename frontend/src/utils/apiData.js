@@ -34,13 +34,15 @@ export const normalizeGraphData = (response) => {
   const data = unwrapApiData(response) || {}
   const nodes = Array.isArray(data.nodes) ? data.nodes.map(node => {
     const id = String(node.id ?? node.paper_id)
+    const localMatch = id.match(/^local:(\d+)$/)
+    const numericPaperId = node.paper_id ?? (localMatch ? Number(localMatch[1]) : /^\d+$/.test(id) ? Number(id) : null)
     return {
       ...node,
       id,
       // ECharts graph links resolve string endpoints against node.name.
       // Keep it identical to the normalized edge ids while label remains display text.
       name: id,
-      paper_id: Number(node.paper_id ?? node.id),
+      paper_id: numericPaperId == null ? null : Number(numericPaperId),
       label: node.title || node.label || node.name || `论文 ${id}`,
     }
   }) : []

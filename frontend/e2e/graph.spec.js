@@ -27,7 +27,7 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   page.on('pageerror', error => errors.push(error.message))
   page.on('response', async response => {
     const path = new URL(response.url()).pathname
-    if (path === '/api/graph/generate' || path === '/api/graph/papers') {
+    if (path === '/api/graph/generate' || path === '/api/graph/enhanced') {
       const body = await response.json().catch(() => null)
       const data = body?.data || {}
       responses[path] = { status: response.status(), nodes: data.nodes?.length || 0, edges: data.edges?.length || 0 }
@@ -68,8 +68,8 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   await expect(page.locator('[data-testid=graph-chart]')).toBeVisible()
   await page.locator('.btn-generate').first().click()
   await expect.poll(() => responses['/api/graph/generate']?.status).toBe(200)
-  await expect.poll(() => responses['/api/graph/papers']?.nodes || 0).toBeGreaterThan(0)
-  await expect.poll(() => responses['/api/graph/papers']?.edges || 0).toBeGreaterThan(0)
+  await expect.poll(() => responses['/api/graph/enhanced']?.nodes || 0).toBeGreaterThan(0)
+  await expect.poll(() => responses['/api/graph/enhanced']?.edges || 0).toBeGreaterThan(0)
 
   const chart = page.locator('[data-testid=graph-chart]')
   await expect(chart).toHaveAttribute('data-chart-ready', 'true')
@@ -146,5 +146,5 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   await page.reload()
   await expect(chart).toHaveAttribute('data-chart-ready', 'true')
   await expect(chart.locator('canvas')).toBeVisible()
-  console.log(JSON.stringify({ graphGenerate: responses['/api/graph/generate'], graphQuery: responses['/api/graph/papers'], chartRect: rect, canvasRect, runtime }))
+  console.log(JSON.stringify({ graphGenerate: responses['/api/graph/generate'], graphQuery: responses['/api/graph/enhanced'], chartRect: rect, canvasRect, runtime }))
 })

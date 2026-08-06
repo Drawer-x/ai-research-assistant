@@ -128,9 +128,9 @@ const searchPapers = async (page = 1) => {
 
   try {
     const params = {
-      q: searchQuery.value,
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
+      query: searchQuery.value,
+      page,
+      page_size: pageSize,
     }
     if (yearFrom.value) params.year_from = yearFrom.value
     if (yearTo.value) params.year_to = yearTo.value
@@ -140,12 +140,12 @@ const searchPapers = async (page = 1) => {
 
     if (res.data.code === 200 || res.data.code === 0) {
       const data = res.data.data || res.data
-      searchResults.value = (data.results || []).map(p => ({
+      searchResults.value = (data.items || []).map(p => ({
         ...p,
-        _imported: false,
+        _imported: Boolean(p.is_imported),
         _importing: false
       }))
-      totalPages.value = Math.ceil((data.total || 0) / pageSize)
+      totalPages.value = Math.max(1, Math.ceil((data.total || 0) / pageSize))
     } else {
       ElMessage.error(res.data.message || '搜索失败')
     }
@@ -164,6 +164,7 @@ const importPaper = async (paper) => {
   paper._importing = true
   try {
     const res = await axios.post('/api/discovery/import', {
+      provider: 'semantic_scholar',
       external_id: paper.external_id || paper.id
     })
 

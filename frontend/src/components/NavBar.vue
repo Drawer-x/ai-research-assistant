@@ -67,10 +67,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { authState, clearAuth, loadCurrentUser } from '../utils/authState'
 
 const router = useRouter()
 const route = useRoute()
-const username = ref('')
+const username = computed(() => authState.user?.username || '')
 const showDropdown = ref(false)
 
 // ===== 导航菜单项 =====
@@ -101,8 +102,7 @@ const goToPlans = () => {
 
 const handleLogout = () => {
   showDropdown.value = false
-  localStorage.removeItem('token')
-  localStorage.removeItem('username')
+  clearAuth()
   ElMessage.success('已退出登录')
   router.push('/login')
 }
@@ -113,8 +113,8 @@ const handleClickOutside = (e) => {
   }
 }
 
-onMounted(() => {
-  username.value = localStorage.getItem('username') || '用户'
+onMounted(async () => {
+  await loadCurrentUser()
   document.addEventListener('click', handleClickOutside)
 })
 

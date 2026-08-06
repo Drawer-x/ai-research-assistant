@@ -1,6 +1,4 @@
-import { defineConfig } from '@playwright/test'
-
-const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH?.trim()
+import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
@@ -9,12 +7,15 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:5174',
     headless: true,
-    browserName: 'chromium',
-    channel: 'msedge',
-    ...(executablePath ? { launchOptions: { executablePath } } : {}),
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
   outputDir: 'test-results',
   reporter: [['list']],
 })

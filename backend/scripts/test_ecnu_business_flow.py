@@ -11,6 +11,8 @@ from app.core.config import settings
 from app.services.ai_summary_service import generate_paper_summary_result
 from app.services.compare_service import compare_papers
 from app.services.qa_service import answer_question_about_paper
+from app.services.agent_service import generate_research_plan
+from app.services.graph_generation_service import generate_paper_relations
 
 
 PAPER_TEXT = (
@@ -63,13 +65,17 @@ def main() -> int:
         return 2
 
     summary_real = _report("summary", lambda: generate_paper_summary_result(PAPER_TEXT))
-    _report("qa", lambda: answer_question_about_paper("论文采用了什么方法？", PAPER_TEXT))
+    qa_real = _report("qa", lambda: answer_question_about_paper("论文采用了什么方法？", PAPER_TEXT))
     papers = [
-        {"paper_id": 1, "title": "轻量注意力模型", "full_text": PAPER_TEXT},
-        {"paper_id": 2, "title": "卷积基线", "full_text": "本文使用卷积网络完成图像分类，实验结果作为基线。"},
+        {"paper_id": 1, "title": "轻量注意力模型", "full_text": PAPER_TEXT + " attention mechanism"},
+        {"paper_id": 2, "title": "注意力卷积基线", "full_text": "This image classifier uses an attention mechanism with a convolutional baseline."},
     ]
-    _report("compare", lambda: compare_papers(papers, ["problem", "method", "result", "limitation"]))
-    return 0 if summary_real else 1
+    compare_real = _report("compare", lambda: compare_papers(papers, ["problem", "method", "result", "limitation"]))
+    relation = generate_paper_relations(papers, ["method_similarity"])
+    relation_ok = bool(relation.get("relations")) and relation.get("is_mock") is False
+    print(f"[method_similarity] success={relation_ok} is_mock={relation.get('is_mock', True)} relations_count={len(relation.get('relations', []))}")
+    agent_real = _report("agent", lambda: generate_research_plan("轻量视觉模型", "完成可复现实验", 2, "undergraduate", papers))
+    return 0 if all((summary_real, qa_real, compare_real, relation_ok, agent_real)) else 1
 
 
 if __name__ == "__main__":

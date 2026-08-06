@@ -190,26 +190,29 @@ const switchMode = (mode) => {
 // ===== 生成推荐 =====
 const generateRecommendations = async () => {
   let params = {}
-  let url = '/api/recommendations'
+  let url = ''
 
   if (currentMode.value === 'paper') {
     if (!seedPaperId.value) {
       ElMessage.warning('请选择一篇种子论文')
       return
     }
-    params = { seed_paper_id: seedPaperId.value, limit: 20 }
+    url = '/api/recommendations/by-paper'
+    params = { paper_id: Number(seedPaperId.value), limit: 20 }
   } else if (currentMode.value === 'library') {
     if (seedPaperIds.value.length === 0) {
       ElMessage.warning('请至少选择一篇种子论文')
       return
     }
-    params = { seed_paper_ids: seedPaperIds.value, limit: 20 }
+    url = '/api/recommendations/for-library'
+    params = { paper_ids: seedPaperIds.value.map(Number), limit: 20 }
   } else if (currentMode.value === 'topic') {
     if (!topicQuery.value.trim()) {
       ElMessage.warning('请输入研究主题')
       return
     }
-    params = { topic: topicQuery.value, limit: 20 }
+    url = '/api/recommendations/by-topic'
+    params = { topic: topicQuery.value.trim(), limit: 20 }
     if (topicYearFrom.value) params.year_from = topicYearFrom.value
     if (topicYearTo.value) params.year_to = topicYearTo.value
   }
@@ -221,9 +224,14 @@ const generateRecommendations = async () => {
     const res = await axios.post(url, params)
     if (res.data.code === 200 || res.data.code === 0) {
       const data = res.data.data || res.data
-      recommendations.value = (data.results || []).map(item => ({
-        ...item,
-        _imported: false,
+      recommendations.value = (Array.isArray(data) ? data : data.items || []).map(record => ({
+        ...record.paper,
+        recommendation_id: record.id,
+        score: record.score,
+        reasons: record.reasons || [],
+        is_fallback: Boolean(record.is_fallback),
+        status: record.status,
+        _imported: record.status === 'imported',
         _importing: false,
         _feedback: false
       }))
@@ -245,9 +253,7 @@ const importRecommendation = async (item) => {
   item._importing = true
 
   try {
-    const res = await axios.post('/api/discovery/import', {
-      external_id: item.external_id || item.id
-    })
+    const res = await axios.post(`/api/recommendations/${item.recommendation_id}/import`)
     if (res.data.code === 200 || res.data.code === 0) {
       item._imported = true
       ElMessage.success('导入成功！')
@@ -268,11 +274,10 @@ const feedbackRecommendation = async (item, type) => {
   item._feedback = true
 
   try {
-    await axios.post('/api/recommendations/feedback', {
-      external_id: item.external_id || item.id,
-      feedback: type
-    })
-    ElMessage.success(type === 'like' ? '已标记为感兴趣' : '已标记为不感兴趣')
+    const status = type === 'like' ? 'read_later' : 'not_interested'
+    await axios.patch(`/api/recommendations/${item.recommendation_id}/status`, { status })
+    item.status = status
+    ElMessage.success(type === 'like' ? '已加入稍后阅读' : '已标记为不感兴趣')
   } catch (error) {
     console.error('反馈失败:', error)
     item._feedback = false

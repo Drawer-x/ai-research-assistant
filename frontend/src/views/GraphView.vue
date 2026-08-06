@@ -133,7 +133,14 @@
 
     <!-- ===== 图表 ===== -->
     <div class="graph-wrapper">
-      <div ref="chartRef" class="graph-chart"></div>
+      <div
+        ref="chartRef"
+        class="graph-chart"
+        data-testid="graph-chart"
+        :data-chart-ready="chartReady ? 'true' : 'false'"
+        :data-graph-nodes="nodes.length"
+        :data-graph-edges="displayEdges.length"
+      ></div>
       <div v-if="loading" class="graph-loading">
         <span class="loading-spinner"></span>
         <span>加载图谱数据...</span>
@@ -261,10 +268,13 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import axios from '../utils/axios'
+import { normalizeGraphData } from '../utils/apiData'
 
 const router = useRouter()
 const chartRef = ref(null)
+const chartReady = ref(false)
 let chartInstance = null
+let resizeObserver = null
 
 // ===== 状态 =====
 const loading = ref(false)
@@ -332,22 +342,23 @@ const loadGraphData = async () => {
   try {
     const res = await axios.get('/api/graph/enhanced')
     if (res.data.code === 200 || res.data.code === 0) {
-      const data = res.data.data || res.data
-      nodes.value = (data.nodes || []).map(n => ({
+      const data = normalizeGraphData(res)
+      nodes.value = data.nodes.map(n => ({
         ...n,
-        _type: n._type || (n.is_local ? 'local' : n.is_recommended ? 'recommended' : 'external')
+        _type: n.node_type || n._type || (n.is_local ? 'local' : n.is_recommended ? 'recommended' : 'external')
       }))
-      edges.value = data.edges || []
+      edges.value = data.edges
       if (nodes.value.length === 0) {
         ElMessage.info('暂无关系数据，点击「生成图谱」创建')
       }
     } else {
-      ElMessage.warning('加载失败，使用示例数据')
-      loadMockData()
+      ElMessage.error(res.data.message || '加载关系图失败')
     }
   } catch (error) {
-    console.warn('加载图谱数据失败，使用示例数据:', error)
-    loadMockData()
+    console.error('加载图谱数据失败:', error)
+    nodes.value = []
+    edges.value = []
+    ElMessage.error(error.response?.data?.message || '加载关系图失败，请稍后重试')
   } finally {
     loading.value = false
     await nextTick()
@@ -364,39 +375,14 @@ const generateGraph = async () => {
       ElMessage.success('图谱生成成功')
       await loadGraphData()
     } else {
-      ElMessage.warning(res.data.message || '生成失败，使用示例数据')
-      loadMockData()
-      await nextTick()
-      renderChart()
+      ElMessage.error(res.data.message || '生成图谱失败')
     }
   } catch (error) {
-    console.warn('生成图谱失败，使用示例数据:', error)
-    loadMockData()
-    await nextTick()
-    renderChart()
-    ElMessage.warning('使用示例数据展示图谱效果')
+    console.error('生成图谱失败:', error)
+    ElMessage.error(error.response?.data?.message || '生成图谱失败，请稍后重试')
   } finally {
     generating.value = false
   }
-}
-
-// ===== Mock 数据 =====
-const loadMockData = () => {
-  nodes.value = [
-    { id: 'local_1', label: 'Attention Is All You Need', authors: 'Vaswani et al.', year: '2017', status: '已读', _type: 'local', tags: ['Transformer', 'NLP'] },
-    { id: 'local_2', label: 'BERT', authors: 'Devlin et al.', year: '2018', status: '在读', _type: 'local', tags: ['BERT', '预训练'] },
-    { id: 'external_1', label: 'GPT-3', authors: 'Brown et al.', year: '2020', status: '未读', _type: 'external', tags: ['GPT', '大语言模型'] },
-    { id: 'external_2', label: 'T5', authors: 'Raffel et al.', year: '2019', status: '未读', _type: 'external', tags: ['多模态'] },
-    { id: 'recommended_1', label: 'XLNet', authors: 'Yang et al.', year: '2019', status: '未读', _type: 'recommended', tags: ['预训练'] }
-  ]
-  edges.value = [
-    { source: 'local_1', target: 'local_2', type: 'citation', weight: 0.9 },
-    { source: 'local_1', target: 'external_1', type: 'topic_similarity', weight: 0.85 },
-    { source: 'local_2', target: 'external_2', type: 'method_similarity', weight: 0.75 },
-    { source: 'external_1', target: 'recommended_1', type: 'recommended_from', weight: 0.65 },
-    { source: 'local_1', target: 'recommended_1', type: 'topic_similarity', weight: 0.55 },
-    { source: 'local_1', target: 'external_2', type: 'same_author', weight: 0.45 }
-  ]
 }
 
 // ===== 渲染图表 =====
@@ -517,6 +503,8 @@ const renderChart = () => {
   }
 
   chartInstance.setOption(option, true)
+  chartRef.value.__echartsInstance = chartInstance
+  chartReady.value = true
   chartInstance.resize()
 
   chartInstance.off('click')
@@ -559,7 +547,7 @@ const getNodeName = (id) => {
 // ===== 展开节点 =====
 const expandNode = async (nodeId) => {
   try {
-    const res = await axios.post('/api/graph/expand', { node_id: nodeId, limit: 10 })
+    const res = await axios.post('/api/graph/expand', { node_id: nodeId, expand_type: 'recommendation', limit: 10 })
     if (res.data.code === 200 || res.data.code === 0) {
       const data = res.data.data || res.data
       const newNodes = (data.nodes || []).map(n => ({
@@ -584,7 +572,7 @@ const expandNode = async (nodeId) => {
 // ===== 导入外部节点 =====
 const importExternalNode = async (node) => {
   try {
-    const res = await axios.post('/api/discovery/import', { external_id: node.id })
+    const res = await axios.post('/api/discovery/import', { provider: 'semantic_scholar', external_id: node.external_id || node.id.replace(/^s2:/, '') })
     if (res.data.code === 200 || res.data.code === 0) {
       node._imported = true
       ElMessage.success('导入成功！')
@@ -600,7 +588,7 @@ const importExternalNode = async (node) => {
 
 // ===== 跳转详情 =====
 const goToDetail = (id) => {
-  const cleanId = id.replace('local_', '')
+  const cleanId = id.replace('local:', '')
   router.push(`/papers/${cleanId}`)
 }
 
@@ -618,11 +606,16 @@ watch([showLocal, showExternal, showRecommended, selectedRelations, weightThresh
 onMounted(() => {
   loadGraphData()
   window.addEventListener('resize', handleResize)
+  resizeObserver = new ResizeObserver(handleResize)
+  if (chartRef.value) resizeObserver.observe(chartRef.value)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
+  resizeObserver?.disconnect()
   if (chartInstance) {
+    chartReady.value = false
+    if (chartRef.value) delete chartRef.value.__echartsInstance
     chartInstance.dispose()
     chartInstance = null
   }

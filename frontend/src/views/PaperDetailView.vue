@@ -128,29 +128,9 @@
       <!-- 总结内容 -->
       <div v-else-if="summary" class="summary-content">
         <div class="summary-grid">
-          <div class="summary-item">
-            <span class="summary-item-label">研究背景</span>
-            <p>{{ summary.background || '暂无' }}</p>
-          </div>
-          <div class="summary-item">
-            <span class="summary-item-label">研究问题</span>
-            <p>{{ summary.problem || '暂无' }}</p>
-          </div>
-          <div class="summary-item">
-            <span class="summary-item-label">核心方法</span>
-            <p>{{ summary.method || '暂无' }}</p>
-          </div>
-          <div class="summary-item">
-            <span class="summary-item-label">主要结论</span>
-            <p>{{ summary.conclusion || '暂无' }}</p>
-          </div>
-          <div class="summary-item highlight">
-            <span class="summary-item-label">创新点</span>
-            <p>{{ summary.innovation || '暂无' }}</p>
-          </div>
-          <div class="summary-item warning">
-            <span class="summary-item-label">局限性</span>
-            <p>{{ summary.limitation || '暂无' }}</p>
+          <div v-for="field in summary.fields" :key="field.key" class="summary-item">
+            <span class="summary-item-label">{{ summaryLabels[field.key] || field.key }}</span>
+            <p>{{ field.value }}</p>
           </div>
         </div>
       </div>
@@ -238,6 +218,7 @@ import { ref, onMounted, nextTick, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from '../utils/axios'
+import { normalizeSummary, unwrapApiData } from '../utils/apiData'
 
 const route = useRoute()
 const router = useRouter()
@@ -276,6 +257,7 @@ const question = ref('')
 const qaLoading = ref(false)
 const qaHistory = ref([])
 const qaHistoryRef = ref(null)
+const summaryLabels = { background: '研究背景', problem: '研究问题', method: '核心方法', experiment: '实验', result: '主要结果', innovation: '创新点', limitation: '局限性' }
 
 const quickQuestions = [
   '这篇论文主要解决了什么问题？',
@@ -333,11 +315,10 @@ const generateSummary = async () => {
       timeout: 120000
     })
     if (res.data.code === 200 || res.data.code === 0) {
-      summary.value = res.data.data
+      summary.value = normalizeSummary(res)
       ElMessage.success('AI 总结生成成功！')
     } else {
       ElMessage.error(res.data.message || '生成总结失败')
-      loadMockSummary()
     }
   } catch (error) {
     console.error('生成总结失败:', error)
@@ -346,21 +327,18 @@ const generateSummary = async () => {
     } else {
       ElMessage.warning('使用示例数据展示效果')
     }
-    loadMockSummary()
   } finally {
     summaryLoading.value = false
   }
 }
 
-const loadMockSummary = () => {
-  summary.value = {
-    background: '近年来，深度学习在自然语言处理领域取得了显著进展，但传统的序列建模方法仍面临并行计算效率低和长距离依赖捕捉困难的问题。',
-    problem: '如何设计一种能够高效并行计算且能有效捕捉长距离依赖的序列建模架构？',
-    method: '提出了 Transformer 架构，核心是自注意力机制和多头注意力，完全摒弃了 RNN 和 CNN。',
-    conclusion: '在 WMT 2014 英德翻译任务上达到 28.4 BLEU，比之前最好的结果提高了 2 BLEU 以上。',
-    innovation: '1) 首次提出完全基于注意力的序列模型；2) 多头注意力机制捕捉不同子空间的特征。',
-    limitation: '计算复杂度随序列长度平方增长，在处理超长序列时内存消耗大。'
-  }
+const loadSummaryHistory = async () => {
+  const data = unwrapApiData(await axios.get(`/api/papers/${paperId.value}/summaries`)) || []
+  if (data.length) summary.value = normalizeSummary(data[0])
+}
+
+const loadQaHistory = async () => {
+  qaHistory.value = unwrapApiData(await axios.get(`/api/papers/${paperId.value}/qa-records`)) || []
 }
 
 // ===== AI 问答 =====
@@ -392,33 +370,13 @@ const askQuestion = async () => {
       scrollToBottom()
     } else {
       ElMessage.error(res.data.message || '问答失败')
-      addMockAnswer(q)
     }
   } catch (error) {
     console.error('问答失败:', error)
-    addMockAnswer(q)
-    ElMessage.warning('使用示例回答展示效果')
+    ElMessage.error(error.response?.data?.message || '问答失败，请稍后重试')
   } finally {
     qaLoading.value = false
   }
-}
-
-const addMockAnswer = (q) => {
-  const mockAnswers = [
-    '根据论文内容，该研究主要关注序列建模与机器翻译任务，提出了基于自注意力机制的 Transformer 架构。',
-    '论文使用了 WMT 2014 英德翻译数据集（约 450 万对句子）和英法翻译数据集（约 3600 万对句子）。',
-    '主要的创新点包括：1) 完全基于注意力的架构；2) 多头注意力机制；3) 位置编码处理序列顺序。',
-    '实验结果表明，Transformer 在 WMT 2014 英德翻译上达到 28.4 BLEU，训练时间大幅减少。',
-    '该架构为 BERT、GPT 等后续大模型奠定了基础。'
-  ]
-  qaHistory.value.push({
-    question: q,
-    answer: mockAnswers[qaHistory.value.length % mockAnswers.length]
-  })
-  question.value = ''
-  setTimeout(() => {
-    scrollToBottom()
-  }, 100)
 }
 
 const scrollToBottom = () => {
@@ -453,6 +411,8 @@ watch(
 
 onMounted(() => {
   fetchPaperDetail()
+  loadSummaryHistory().catch(() => {})
+  loadQaHistory().catch(() => {})
 })
 </script>
 
