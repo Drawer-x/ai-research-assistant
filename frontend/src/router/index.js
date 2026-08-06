@@ -52,6 +52,17 @@ const router = createRouter({
       name: 'planDetail',
       component: () => import('../views/PlanDetailView.vue')
     },
+    // ===== Sprint 4 新增 =====
+    {
+      path: '/discovery',
+      name: 'discovery',
+      component: () => import('../views/DiscoveryView.vue')
+    },
+    {
+      path: '/recommendations',
+      name: 'recommendations',
+      component: () => import('../views/RecommendationView.vue')
+    },
     {
       path: '/:pathMatch(.*)*',
       name: 'notFound',
