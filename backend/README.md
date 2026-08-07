@@ -18,7 +18,7 @@ copy .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Swagger: http://127.0.0.1:8000/docs
+Swagger: http://127.0.0.1:8769/docs
 
 数据库默认创建为 `backend/ai_research_assistant.db`，上传文件保存到 `backend/uploads/{user_id}/`；两者均被根目录 `.gitignore` 忽略。
 
@@ -117,6 +117,6 @@ python scripts/final_integration_test.py --base-url http://127.0.0.1:8769 --requ
 测试成功输出 `FINAL_INTEGRATION_TEST_OK`；脚本不打印 token、Key、完整正文或 Prompt，并会清理其上传的临时论文。
 # Sprint 4 backend
 
-The backend now provides authenticated Semantic Scholar discovery/import, recommendation orchestration with a truthful fallback, and enhanced graph endpoints. Configure the optional `S2_*` variables shown in `.env.example`; tests remain offline. Run `python scripts/migrate_sprint4.py` twice safely, then `python scripts/sprint4_smoke_test.py`. See `docs/design/sprint4_backend_contract.md` for the fixed integration contract.
+The backend provides authenticated Crossref discovery/import, local recommendation orchestration, and enhanced graph endpoints. Crossref requires no API key; `CROSSREF_MAILTO` is optional and enables polite-pool identification. Tests remain offline. Run `python scripts/migrate_sprint4.py` twice safely, then `python scripts/sprint4_smoke_test.py`. See `docs/design/sprint4_backend_contract.md` for the fixed integration contract.
 
-Anonymous public access is supported when `S2_API_KEY` is empty (including blank, `None`, or `null`-like values); no key header is sent. Run `python scripts/test_semantic_scholar_api.py --live --anonymous` for a real, safe public API probe. If Recommendations rejects or rate-limits anonymous access, recommendation routes fall back to real Academic Graph search results and mark every result `is_fallback=true`.
+Run `python scripts/test_crossref_api.py --live` for a bounded real API probe. Crossref supplies candidates and deposited metadata; Member B's local algorithms perform all recommendation ranking. References are resolved only from deposited DOI evidence. Citation expansion is limited to known-record reverse citations and never treats relevance search as citation evidence.

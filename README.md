@@ -15,7 +15,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Swagger：http://127.0.0.1:8000/docs
+Swagger：http://127.0.0.1:8769/docs
 
 `ECNU_API_KEY` 在 Sprint 1 中是可选配置。未配置或 AI/RAG 服务不可用时，后端自动返回结构稳定的 mock 数据。
 
@@ -29,7 +29,7 @@ npm install
 npm run dev
 ```
 
-打开终端显示的地址（默认 http://localhost:5173）。开发服务器默认把 `/api` 代理到 `http://127.0.0.1:8000`；联调 8769 后端时可先设置 `VITE_PROXY_TARGET=http://127.0.0.1:8769`。后端 CORS 同时允许本地 5173 和 5174。
+打开终端显示的地址（默认 http://localhost:5173）。开发服务器默认把 `/api` 代理到 `http://127.0.0.1:8769`；如需覆盖可设置 `VITE_PROXY_TARGET`。后端 CORS 允许本地 5173、5174 和 5175。
 
 ## 联调顺序
 

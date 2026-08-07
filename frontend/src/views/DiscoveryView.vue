@@ -12,7 +12,7 @@
         <span class="title-text">论文发现</span>
         <span class="title-badge">{{ searchResults.length }} 篇</span>
       </h1>
-      <p class="page-desc">搜索 Semantic Scholar 上的学术论文</p>
+      <p class="page-desc">搜索 Crossref 收录的真实学术论文</p>
     </div>
 
     <!-- ===== 搜索栏 ===== -->
@@ -22,9 +22,9 @@
           v-model="searchQuery"
           class="search-input"
           placeholder="输入关键词搜索论文，例如：Transformer"
-          @keyup.enter="searchPapers"
+          @keyup.enter="searchPapers(1)"
         />
-        <button class="search-btn" @click="searchPapers" :disabled="loading">
+        <button class="search-btn" @click="searchPapers(1)" :disabled="loading">
           {{ loading ? '搜索中...' : '搜索' }}
         </button>
       </div>
@@ -76,7 +76,7 @@
             <p>{{ truncateText(paper.abstract, 200) }}</p>
           </div>
           <div class="paper-footer">
-            <button class="btn-import" @click="importPaper(paper)" :disabled="paper._importing">
+            <button class="btn-import" @click="importPaper(paper)" :disabled="paper._importing || paper._imported">
               {{ paper._imported ? '已导入' : paper._importing ? '导入中...' : '加入文献库' }}
             </button>
             <a v-if="paper.external_url" :href="paper.external_url" target="_blank" class="btn-link">查看原文</a>
@@ -164,7 +164,7 @@ const importPaper = async (paper) => {
   paper._importing = true
   try {
     const res = await axios.post('/api/discovery/import', {
-      provider: 'semantic_scholar',
+      provider: 'crossref',
       external_id: paper.external_id || paper.id
     })
 

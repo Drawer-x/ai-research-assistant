@@ -20,7 +20,8 @@ function pdfBuffer(title) {
   return Buffer.from(pdf)
 }
 
-test('real graph is visible with live nodes and edges', async ({ page }) => {
+test('real graph is visible with live nodes and edges', async ({ page, browser }) => {
+  test.setTimeout(300_000)
   const errors = []
   const responses = {}
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
@@ -57,12 +58,66 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   const loginResponse = await loginResponsePromise
   expect(loginResponse.status()).toBe(200)
   await page.waitForURL('**/papers')
+  await expect(page.locator('.navbar .username')).toHaveText(username)
+  await page.reload()
+  await expect(page).toHaveURL(/\/papers$/)
+  await expect(page.locator('.navbar .username')).toHaveText(username)
 
   for (let index = 1; index <= 3; index += 1) {
     await page.getByRole('button', { name: /上传论文/ }).first().click()
     await page.locator('input[type=file]').setInputFiles({ name: `rag-transformer-${index}.pdf`, mimeType: 'application/pdf', buffer: pdfBuffer(`RAG Transformer Study ${index}`) })
     await expect(page.locator('.paper-item')).toHaveCount(index, { timeout: 30_000 })
   }
+
+  await page.locator('.paper-item .paper-content').first().click()
+  const summaryResponse = page.waitForResponse(r => /\/api\/papers\/\d+\/summary$/.test(new URL(r.url()).pathname))
+  await page.locator('.summary-btn').click()
+  const summaryBody = await (await summaryResponse).json()
+  expect(summaryBody.data.is_mock).toBe(false)
+  expect(summaryBody.data.analysis_scope).toBe('full_text')
+  await expect(page.locator('.summary-content')).toBeVisible()
+  await expect(page.locator('.summary-item').first()).not.toBeEmpty()
+  const question = 'What is the main contribution of this paper?'
+  await page.locator('.qa-input-field').fill(question)
+  const qaResponse = page.waitForResponse(r => /\/api\/papers\/\d+\/qa$/.test(new URL(r.url()).pathname))
+  await page.locator('.qa-submit-btn').click()
+  const qaBody = await (await qaResponse).json()
+  expect(qaBody.data.is_mock).toBe(false)
+  await expect(page.locator('.qa-item').filter({ hasText: question })).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.summary-content')).toBeVisible()
+  await expect(page.locator('.qa-item').filter({ hasText: question })).toBeVisible()
+
+  await page.goto('/review')
+  await page.locator('.paper-select-item').nth(0).click()
+  await page.locator('.paper-select-item').nth(1).click()
+  const compareResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/papers/compare')
+  await page.locator('.selection-actions .btn-primary-sm').first().click()
+  const compareBody = await (await compareResponse).json()
+  expect(compareBody.data.is_mock).toBe(false)
+  await expect(page.locator('.compare-table')).toBeVisible()
+  await expect(page.locator('.compare-table tbody tr').first()).toBeVisible()
+
+  await page.goto('/agent')
+  const agentInputs = page.locator('.agent-input-card textarea, .agent-input-card input')
+  await agentInputs.nth(0).fill('RAG browser integration research')
+  await agentInputs.nth(1).fill('Produce an evidence-based review')
+  await page.locator('.paper-selector .el-select').click()
+  await page.locator('.el-select-dropdown__item:visible').first().click()
+  const planResponse = page.waitForResponse(r => new URL(r.url()).pathname === '/api/agent/research-plan')
+  await page.locator('.input-actions .btn-primary').click()
+  const planBody = await (await planResponse).json()
+  expect(planBody.data.is_mock).toBe(false)
+  await expect(page.locator('.plan-result')).toBeVisible()
+  await expect(page.locator('.plan-id')).toBeVisible()
+  const planTopic = 'RAG browser integration research'
+  await page.locator('.input-actions .btn-outline').click()
+  await expect(page.locator('.plan-item').filter({ hasText: planTopic })).toBeVisible()
+  await page.locator('.plan-item').filter({ hasText: planTopic }).click()
+  await expect(page.locator('.plan-content')).toBeVisible()
+  await expect(page.locator('.plan-title')).toContainText(planTopic)
+  await page.reload()
+  await expect(page.locator('.plan-content')).toBeVisible()
 
   await page.goto('/graph')
   await expect(page.locator('[data-testid=graph-chart]')).toBeVisible()
@@ -132,8 +187,10 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   await expect(page.locator('.graph-loading')).toHaveCount(0)
   await expect(page.locator('.empty-graph')).toHaveCount(0)
 
-  const [nodeX, nodeY] = runtime.nodeLayouts[0]
-  await canvas.click({ position: { x: nodeX, y: nodeY } })
+  for (const [nodeX,nodeY] of runtime.nodeLayouts) {
+    await canvas.click({ position: { x: nodeX, y: nodeY } })
+    if (await page.locator('.drawer.open').isVisible()) break
+  }
   await expect(page.locator('.drawer.open')).toBeVisible()
   await expect(page.locator('.drawer.open .node-title')).not.toBeEmpty()
   await expect(page.locator('.drawer.open .node-title')).not.toHaveText('[object Object]')
@@ -146,5 +203,34 @@ test('real graph is visible with live nodes and edges', async ({ page }) => {
   await page.reload()
   await expect(chart).toHaveAttribute('data-chart-ready', 'true')
   await expect(chart.locator('canvas')).toBeVisible()
+
+  const contextB = await browser.newContext()
+  const pageB = await contextB.newPage()
+  const suffixB = `${Date.now()}`.slice(-8)+Math.random().toString(16).slice(2,6)
+  const userB = `iso${suffixB}`
+  await pageB.goto('/register')
+  const inputsB = pageB.locator('input')
+  await inputsB.nth(0).fill(userB)
+  await inputsB.nth(1).fill(`${userB}@example.com`)
+  await inputsB.nth(2).fill(password)
+  await inputsB.nth(3).fill(password)
+  await pageB.locator('.register-btn').click()
+  await pageB.waitForURL('**/login')
+  await pageB.locator('.login-form input').nth(0).fill(userB)
+  await pageB.locator('.login-form input').nth(1).fill(password)
+  await pageB.locator('.login-btn').click()
+  await pageB.waitForURL('**/papers')
+  await expect(pageB.locator('.paper-item')).toHaveCount(0)
+  await expect(pageB.locator('body')).not.toContainText('RAG Transformer Study 1')
+  await pageB.goto('/plans')
+  await expect(pageB.locator('.plan-item')).toHaveCount(0)
+  await expect(pageB.locator('body')).not.toContainText(planTopic)
+  await pageB.goto('/recommendations')
+  await expect(pageB.locator('.results-list .paper-item')).toHaveCount(0)
+  await pageB.goto('/graph')
+  const chartB = pageB.locator('[data-testid=graph-chart]')
+  await expect.poll(async()=>Number(await chartB.getAttribute('data-graph-nodes'))).toBe(0)
+  await expect(pageB.locator('.empty-graph')).toBeVisible()
+  await contextB.close()
   console.log(JSON.stringify({ graphGenerate: responses['/api/graph/generate'], graphQuery: responses['/api/graph/enhanced'], chartRect: rect, canvasRect, runtime }))
 })

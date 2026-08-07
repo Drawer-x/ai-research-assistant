@@ -123,7 +123,7 @@ def _node_id_local(paper_id: int) -> str:
 
 
 def _node_id_external(external_id: str) -> str:
-    return f"s2:{external_id}"
+    return f"crossref:{external_id}"
 
 
 def _node_id_recommendation(record_id: int) -> str:

@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 20_000 },
   use: {
-    baseURL: 'http://127.0.0.1:5174',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5174',
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',

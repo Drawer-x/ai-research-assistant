@@ -111,6 +111,7 @@
           <div class="paper-header">
             <h3 class="paper-title">{{ item.title }}</h3>
             <span class="score-tag">{{ (item.score * 100).toFixed(0) }}%</span>
+            <span class="status-tag" data-testid="recommendation-status">{{ item.status }}</span>
           </div>
           <div class="paper-meta">
             <span><strong>作者：</strong>{{ item.authors?.join('、') || '未知' }}</span>
@@ -180,6 +181,25 @@ const loadLocalPapers = async () => {
   }
 }
 
+const normalizeRecords = records => records.map(record => ({
+  ...record.paper,
+  recommendation_id: record.id,
+  score: record.score,
+  reasons: record.reasons || [],
+  is_fallback: Boolean(record.is_fallback),
+  status: record.status,
+  _imported: record.status === 'imported',
+  _importing: false,
+  _feedback: false
+}))
+
+const loadHistory = async () => {
+  const res = await axios.get('/api/recommendations', { params: { page_size: 100 } })
+  const data = res.data.data || res.data
+  recommendations.value = normalizeRecords(data.items || [])
+  hasLoaded.value = recommendations.value.length > 0
+}
+
 // ===== 切换模式 =====
 const switchMode = (mode) => {
   currentMode.value = mode
@@ -224,17 +244,7 @@ const generateRecommendations = async () => {
     const res = await axios.post(url, params)
     if (res.data.code === 200 || res.data.code === 0) {
       const data = res.data.data || res.data
-      recommendations.value = (Array.isArray(data) ? data : data.items || []).map(record => ({
-        ...record.paper,
-        recommendation_id: record.id,
-        score: record.score,
-        reasons: record.reasons || [],
-        is_fallback: Boolean(record.is_fallback),
-        status: record.status,
-        _imported: record.status === 'imported',
-        _importing: false,
-        _feedback: false
-      }))
+      recommendations.value = normalizeRecords(Array.isArray(data) ? data : data.items || [])
       ElMessage.success(`已生成 ${recommendations.value.length} 条推荐`)
     } else {
       ElMessage.error(res.data.message || '生成推荐失败')
@@ -287,6 +297,7 @@ const feedbackRecommendation = async (item, type) => {
 // ===== 生命周期 =====
 onMounted(() => {
   loadLocalPapers()
+  loadHistory().catch(error => console.error('加载推荐历史失败:', error))
 })
 </script>
 

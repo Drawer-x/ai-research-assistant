@@ -9,7 +9,7 @@ from app.api import agent, auth, discovery, graph, papers, recommendations
 from app.core.config import settings
 from app.core.response import error_response, success_response
 from app.database import Base, engine
-from app.services.semantic_scholar_client import AuthenticationRequiredError, RateLimitedError, SemanticScholarError, SemanticScholarNotFound, UpstreamTimeoutError
+from app.services.crossref_client import CrossrefError, CrossrefNotFound, RateLimitedError, UpstreamTimeoutError
 
 
 @asynccontextmanager
@@ -28,6 +28,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -51,16 +53,14 @@ def health():
     return success_response(message="backend is running")
 
 
-@app.exception_handler(SemanticScholarNotFound)
-async def s2_not_found(request: Request, exc: SemanticScholarNotFound): return error_response(str(exc),404)
-@app.exception_handler(SemanticScholarError)
-async def s2_unavailable(request: Request, exc: SemanticScholarError): return error_response("External paper service unavailable",503)
+@app.exception_handler(CrossrefNotFound)
+async def crossref_not_found(request: Request, exc: CrossrefNotFound): return error_response(str(exc),404)
+@app.exception_handler(CrossrefError)
+async def crossref_unavailable(request: Request, exc: CrossrefError): return error_response("External paper service unavailable",503)
 @app.exception_handler(RateLimitedError)
-async def s2_limited(request: Request, exc: RateLimitedError): return error_response("External paper service requests are too frequent",429)
-@app.exception_handler(AuthenticationRequiredError)
-async def s2_auth_required(request: Request, exc: AuthenticationRequiredError): return error_response("The current public endpoint requires authentication",503)
+async def crossref_limited(request: Request, exc: RateLimitedError): return error_response("External paper service requests are too frequent",429)
 @app.exception_handler(UpstreamTimeoutError)
-async def s2_timeout(request: Request, exc: UpstreamTimeoutError): return error_response("External paper service is temporarily unavailable",503)
+async def crossref_timeout(request: Request, exc: UpstreamTimeoutError): return error_response("External paper service is temporarily unavailable",503)
 @app.exception_handler(LookupError)
 async def lookup_error(request: Request, exc: LookupError): return error_response(str(exc),404)
 @app.exception_handler(ValueError)

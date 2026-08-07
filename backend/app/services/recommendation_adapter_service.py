@@ -1,6 +1,6 @@
 import math
 def _fallback(candidates,limit):
-    n=max(len(candidates),1); return {"items":[{"paper":p,"score":round(max(0,1-i/n),6),"reasons":["Ranked from Semantic Scholar Academic Graph search results"],"seed_paper_ids":[],"is_fallback":True} for i,p in enumerate(candidates[:limit])]}
+    n=max(len(candidates),1); return {"items":[{"paper":p,"score":round(max(0,1-i/n),6),"reasons":["Ranked from Crossref metadata candidates"],"seed_paper_ids":[],"is_fallback":True} for i,p in enumerate(candidates[:limit])]}
 def _call(name,args,candidates,limit):
     try:
         from app.services import recommendation_service as impl

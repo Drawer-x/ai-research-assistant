@@ -175,14 +175,14 @@ python scripts/init_db.py
 #### Step 5：启动后端
 ```
 # 开发模式（热重载）
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8769
 
 # 生产模式
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn app.main:app --host 0.0.0.0 --port 8769 --workers 4
 ```
 验证：
-- 访问 http://localhost:8000/docs 查看 API 文档
-- 访问 http://localhost:8000/ 查看健康检查
+- 访问 http://localhost:8769/docs 查看 API 文档
+- 访问 http://localhost:8769/ 查看健康检查
   
 ### 4.3 前端部署
 #### Step 1：安装 Node.js 依赖
@@ -198,7 +198,7 @@ npm install
 #### Step 2：配置环境变量
 创建 frontend/.env：
 ```
-VITE_API_URL=http://localhost:8000
+VITE_PROXY_TARGET=http://127.0.0.1:8769
 VITE_APP_TITLE=AI Research Assistant
 ```
 #### Step 3：启动前端开发服务器
@@ -244,15 +244,15 @@ ERROR: [Errno 98] Address already in use
 ```
 # 查找占用端口的进程
 # Windows
-netstat -ano | findstr :8000
+netstat -ano | findstr :8769
 
 # Linux / Mac
-sudo lsof -i :8000
+sudo lsof -i :8769
 
 # 终止进程
 kill -9 PID
 # 或更换端口
-uvicorn app.main:app --port 8001
+uvicorn app.main:app --port 8770
 ```
 ### 问题 4：前端构建失败
 现象：
@@ -273,7 +273,7 @@ npm run build
 ```
 ### 问题 5：CORS 跨域错误
 ```
-Access to fetch at 'http://localhost:8000/api/...' from origin 'http://localhost:5173' has been blocked by CORS policy
+Access to fetch at 'http://localhost:8769/api/...' from origin 'http://localhost:5173' has been blocked by CORS policy
 ```
 解决方案：
 ```

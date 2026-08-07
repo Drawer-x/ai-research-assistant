@@ -1,5 +1,4 @@
 """Failure-safe FAISS-backed per-paper vector storage."""
-
 from __future__ import annotations
 
 import math
@@ -15,7 +14,7 @@ from uuid import uuid4
 from app.core.config import BACKEND_DIR
 
 
-VECTOR_DIR = BACKEND_DIR / "vector_db"
+VECTOR_DIR = Path(os.environ.get("VECTOR_DIR") or (BACKEND_DIR / "vector_db"))
 _LOCKS: dict[int, RLock] = {}
 _LOCKS_GUARD = Lock()
 

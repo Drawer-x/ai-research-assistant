@@ -449,8 +449,8 @@ class EnhancedRelationServiceTests(unittest.TestCase):
         for item in result["relations"]:
             self.assertNotEqual(item["source"], item["target"])
             self.assertTrue(0.0 <= item["weight"] <= 1.0)
-            self.assertTrue(item["source"].startswith(("local:", "s2:", "recommendation:")))
-            self.assertTrue(item["target"].startswith(("local:", "s2:", "recommendation:")))
+            self.assertTrue(item["source"].startswith(("local:", "crossref:", "recommendation:")))
+            self.assertTrue(item["target"].startswith(("local:", "crossref:", "recommendation:")))
         recommended = [
             item for item in result["relations"] if item["relation_type"] == "recommended_from"
         ]

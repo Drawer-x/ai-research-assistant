@@ -111,7 +111,7 @@ const loadPlans = async () => {
   try {
     const res = await axios.get('/api/agent/research-plans')
     if (res.data.code === 200 || res.data.code === 0) {
-      plans.value = res.data.data || []
+      plans.value = (res.data.data || []).map(plan => ({ ...plan, topic: plan.topic || plan.research_topic }))
       if (plans.value.length === 0) {
         ElMessage.info('暂无科研计划')
       }

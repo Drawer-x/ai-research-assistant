@@ -197,7 +197,8 @@ const loadPlanDetail = async () => {
   try {
     const res = await axios.get(`/api/agent/research-plans/${planId.value}`)
     if (res.data.code === 200 || res.data.code === 0) {
-      plan.value = res.data.data || res.data
+      const data = res.data.data || res.data
+      plan.value = { ...data, topic: data.topic || data.research_topic }
     } else {
       ElMessage.warning(res.data.message || '加载失败，使用示例数据')
       loadMockDetail()

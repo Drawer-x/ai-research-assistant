@@ -13,7 +13,7 @@ from app.models.relation import PaperRelation
 from app.schemas.graph import GraphExpandRequest, GraphGenerateRequest
 from app.models.paper_recommendation import PaperRecommendation
 from app.services.discovery_service import resolve_local_paper_external_id
-from app.services.semantic_scholar_client import SemanticScholarClient, SemanticScholarError
+from app.services.crossref_client import CrossrefClient
 from app.services.graph_adapter_service import safe_generate_paper_relations
 from app.services.graph_service import build_paper_graph
 
@@ -25,7 +25,7 @@ def relation_types(current_user: User = Depends(get_current_user)):
     return success_response(["citation", "topic_similarity", "method_similarity", "same_author", "recommended_from"])
 
 def _external_node(p, kind="external", record_id=None):
-    return {"id":f"recommendation:{record_id}" if record_id else f"s2:{p.get('external_id')}","node_type":kind,"paper_id":None,"external_id":p.get("external_id"),"title":p.get("title"),"year":p.get("year"),"source":"semantic_scholar","imported":False,"category":1}
+    return {"id":f"recommendation:{record_id}" if record_id else f"crossref:{p.get('external_id')}","node_type":kind,"paper_id":None,"external_id":p.get("external_id"),"title":p.get("title"),"year":p.get("year"),"source":"crossref","imported":False,"category":1}
 
 @router.get("/enhanced")
 def enhanced(paper_ids: list[int] = None, relation_types: list[str] = None, min_weight: float = 0, include_external: bool = True, max_nodes: int = 50, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -58,15 +58,16 @@ def expand(payload:GraphExpandRequest,db:Session=Depends(get_db),current_user:Us
     if not paper:return error_response("paper not found",404)
     eid=resolve_local_paper_external_id(db,paper,current_user.id)
     if not eid:return error_response("paper cannot be resolved",422)
-    client=SemanticScholarClient()
+    client=CrossrefClient(); citation_scope=None
     if payload.expand_type=="recommendation":
         recommendation_fallback=False
-        try:items=client.get_recommendations_for_paper(eid,payload.limit)
-        except SemanticScholarError:
-            recommendation_fallback=True;seed=client.get_paper(eid);query=" ".join((seed.get("fields_of_study") or [])[:2]+[seed.get("title") or ""])[:180];items=client.search_papers(query,page_size=min(payload.limit*2,50))["items"];items=[p for p in items if p.get("external_id")!=eid][:payload.limit]
-    else:items=getattr(client,"get_"+payload.expand_type)(eid,payload.limit)
+        seed=client.get_work(eid);query=" ".join([seed.get("title") or ""]+[a.get("name","") for a in seed.get("authors",[])[:2]])[:180];items=client.search_works(query,page_size=min(payload.limit*2,50))["items"];items=[p for p in items if p.get("external_id")!=eid][:payload.limit]
+    elif payload.expand_type=="references": items=client.get_references(eid,payload.limit)
+    else:
+        # Crossref has no citing-papers endpoint. Never substitute relevance search.
+        items=[];citation_scope="known_records_only"
     nodes=[_external_node(p) for p in items];rtype="recommended_from" if payload.expand_type=="recommendation" else "citation";description="Academic Graph search fallback" if payload.expand_type=="recommendation" and recommendation_fallback else payload.expand_type;edges=[{"source":payload.node_id if payload.expand_type!="citations" else n["id"],"target":n["id"] if payload.expand_type!="citations" else payload.node_id,"relation_type":rtype,"weight":1.0,"description":description,"directed":True,"is_fallback":recommendation_fallback if payload.expand_type=="recommendation" else False} for n in nodes]
-    return success_response({"nodes":nodes,"edges":edges,"meta":{"total_nodes":len(nodes),"total_edges":len(edges),"truncated":False,"is_fallback":True}})
+    return success_response({"nodes":nodes,"edges":edges,"meta":{"total_nodes":len(nodes),"total_edges":len(edges),"truncated":False,"is_fallback":False,"citation_scope":citation_scope}})
 
 @router.get("/papers")
 def paper_graph(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

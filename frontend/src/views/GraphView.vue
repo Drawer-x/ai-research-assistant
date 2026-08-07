@@ -572,7 +572,7 @@ const expandNode = async (nodeId) => {
 // ===== 导入外部节点 =====
 const importExternalNode = async (node) => {
   try {
-    const res = await axios.post('/api/discovery/import', { provider: 'semantic_scholar', external_id: node.external_id || node.id.replace(/^s2:/, '') })
+    const res = await axios.post('/api/discovery/import', { provider: 'crossref', external_id: node.external_id || node.id.replace(/^crossref:/, '') })
     if (res.data.code === 200 || res.data.code === 0) {
       node._imported = true
       ElMessage.success('导入成功！')
