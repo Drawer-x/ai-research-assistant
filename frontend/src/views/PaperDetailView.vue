@@ -85,6 +85,15 @@
             </svg>
             查看关系图
           </button>
+          <input ref="externalPdfInput" type="file" accept="application/pdf,.pdf" hidden @change="uploadExternalPdf" />
+          <button
+            v-if="paper.pdf_path?.startsWith('external://')"
+            class="btn-discover-secondary"
+            :disabled="pdfUploading"
+            @click="externalPdfInput?.click()"
+          >
+            {{ pdfUploading ? '正在解析 PDF...' : '补传全文 PDF' }}
+          </button>
         </div>
       </div>
       <div v-else class="empty-paper">
@@ -257,6 +266,8 @@ const question = ref('')
 const qaLoading = ref(false)
 const qaHistory = ref([])
 const qaHistoryRef = ref(null)
+const externalPdfInput = ref(null)
+const pdfUploading = ref(false)
 const summaryLabels = { background: '研究背景', problem: '研究问题', method: '核心方法', experiment: '实验', result: '主要结果', innovation: '创新点', limitation: '局限性' }
 
 const quickQuestions = [
@@ -323,9 +334,9 @@ const generateSummary = async () => {
   } catch (error) {
     console.error('生成总结失败:', error)
     if (error.code === 'ECONNABORTED') {
-      ElMessage.warning('AI 响应超时，请稍后重试或使用示例数据')
+      ElMessage.warning('AI 响应超时，请稍后重试')
     } else {
-      ElMessage.warning('使用示例数据展示效果')
+      ElMessage.error(error.response?.data?.message || '生成总结失败')
     }
   } finally {
     summaryLoading.value = false
@@ -382,6 +393,30 @@ const askQuestion = async () => {
 const scrollToBottom = () => {
   if (qaHistoryRef.value) {
     qaHistoryRef.value.scrollTop = qaHistoryRef.value.scrollHeight
+  }
+}
+
+const uploadExternalPdf = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  pdfUploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await axios.post(`/api/papers/${paperId.value}/pdf`, formData, { timeout: 120000 })
+    const data = unwrapApiData(res)
+    paper.value = {
+      ...data,
+      id: data.paper_id || data.id,
+      tags: data.tags || data.tag_list || []
+    }
+    ElMessage.success('全文解析成功，现在可以生成总结和使用 AI 问答')
+  } catch (error) {
+    console.error('补传 PDF 失败:', error)
+    ElMessage.error(error.response?.data?.message || '补传 PDF 失败')
+  } finally {
+    pdfUploading.value = false
+    event.target.value = ''
   }
 }
 

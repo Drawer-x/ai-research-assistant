@@ -29,19 +29,23 @@ def _search_query(papers):
         fields=p.get("fields_of_study",[]) if isinstance(p,dict) else []
         title=p.get("title","") if isinstance(p,dict) else p.title
         words.extend(str(x) for x in fields[:2]);words.extend(w.strip(".,:;()[]").lower() for w in normalize_title(title).split() if len(w)>3)
+        if isinstance(p,dict) and len(words)<8:
+            abstract=p.get("abstract") or ""
+            words.extend(w.strip(".,:;()[]").lower() for w in normalize_title(abstract).split() if len(w)>3)
     unique=[]
     for word in words:
         if word and word.casefold() not in {x.casefold() for x in unique}:unique.append(word)
     return " ".join(unique[:8])[:180] or "research"
 def _academic_candidates(client,papers,limit):return client.search_papers(_search_query(papers),page_size=min(100,max(20,limit*2)))["items"]
+def _local_seed(p):
+    return {"provider":"local","external_id":f"local:{p.id}","title":p.title,"abstract":p.abstract or (p.full_text or "")[:4000],"authors":p.authors or "","year":p.year,"venue":p.venue,"doi":None,"fields_of_study":[],"paper_id":p.id}
 def by_paper(db,user_id,paper_id,limit):
     p=db.scalar(select(Paper).where(Paper.id==paper_id,Paper.user_id==user_id));
     if not p: raise LookupError("paper not found")
     eid=resolve_local_paper_external_id(db,p,user_id)
-    if not eid: raise ValueError("paper cannot be resolved on Crossref")
-    client=CrossrefClient();seed=client.get_work(eid)
+    client=CrossrefClient();seed=client.get_work(eid) if eid else _local_seed(p)
     candidates=_academic_candidates(client,[seed],limit)
-    c=_filter(db,user_id,candidates,[eid]);result=recommend_by_paper({**seed,"paper_id":p.id},c,limit);return _persist(db,user_id,"by_paper",result["items"],[paper_id])
+    c=_filter(db,user_id,candidates,[eid] if eid else []);result=recommend_by_paper({**seed,"paper_id":p.id},c,limit);return _persist(db,user_id,"by_paper",result["items"],[paper_id])
 def for_library(db,user_id,paper_ids,limit):
     papers=db.scalars(select(Paper).where(Paper.user_id==user_id,Paper.id.in_(paper_ids))).all()
     if len(papers)!=len(set(paper_ids)): raise LookupError("paper not found")

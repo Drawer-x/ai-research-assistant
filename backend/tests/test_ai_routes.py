@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,15 +9,17 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.api import agent, papers
+from app.api import agent, discovery, papers, recommendations
 from app.core.response import error_response
 from app.core.security import get_current_user
-from app.database import Base, get_db
+from app.database import Base, _enable_sqlite_foreign_keys, get_db
 from app.models.paper import Paper
+from app.models.paper_external_source import PaperExternalSource
 from app.models.qa_record import QARecord
 from app.models.research_plan import ResearchPlan
 from app.models.summary import AISummary
@@ -43,6 +46,8 @@ class AIRouteTests(unittest.TestCase):
 
         cls.app.include_router(papers.router, prefix="/api")
         cls.app.include_router(agent.router, prefix="/api")
+        cls.app.include_router(discovery.router, prefix="/api")
+        cls.app.include_router(recommendations.router, prefix="/api")
 
     @classmethod
     def tearDownClass(cls):
@@ -89,6 +94,67 @@ class AIRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(self.db.scalar(select(func.count()).select_from(QARecord)), 0)
 
+    def test_sqlite_connections_enable_foreign_keys(self):
+        connection = sqlite3.connect(":memory:")
+        try:
+            _enable_sqlite_foreign_keys(connection, None)
+            self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        finally:
+            connection.close()
+
+    def test_delete_paper_explicitly_removes_external_source(self):
+        paper = self.add_paper()
+        source = PaperExternalSource(
+            user_id=self.user.id,
+            paper_id=paper.id,
+            provider="crossref",
+            external_id="10.1000/delete-test",
+        )
+        self.db.add(source)
+        self.db.commit()
+        response = self.client.delete(f"/api/papers/{paper.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.scalar(select(func.count()).select_from(PaperExternalSource)), 0)
+
+    def test_discovery_import_integrity_conflict_returns_409_and_rolls_back(self):
+        error = IntegrityError("insert", {}, Exception("conflict"))
+        with patch("app.api.discovery.import_external_paper", side_effect=error):
+            response = self.client.post(
+                "/api/discovery/import",
+                json={"provider": "crossref", "external_id": "10.1000/conflict"},
+            )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("文献关联记录冲突", response.json()["message"])
+
+    def test_recommendation_by_local_paper_falls_back_when_crossref_id_is_missing(self):
+        paper = self.add_paper(full_text="transformer forecasting with temporal attention")
+        paper.title = "transformer"
+        self.db.commit()
+        candidate = {
+            "provider": "crossref",
+            "external_id": "10.1000/candidate",
+            "title": "Transformer Forecasting Methods",
+            "abstract": "temporal attention forecasting",
+            "authors": [],
+            "year": 2025,
+            "venue": "Test Venue",
+            "doi": "10.1000/candidate",
+            "citation_count": 5,
+            "fields_of_study": [],
+        }
+        with (
+            patch("app.services.recommendation_orchestration_service.resolve_local_paper_external_id", return_value=None),
+            patch("app.services.recommendation_orchestration_service.CrossrefClient") as client_class,
+        ):
+            client_class.return_value.search_papers.return_value = {"items": [candidate]}
+            response = self.client.post(
+                "/api/recommendations/by-paper",
+                json={"paper_id": paper.id, "limit": 20},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["data"]), 1)
+        client_class.return_value.get_work.assert_not_called()
+
     @patch("app.api.papers.safe_answer_question")
     def test_qa_never_reads_another_users_index(self, answer):
         paper = self.add_paper(self.other)
@@ -109,6 +175,55 @@ class AIRouteTests(unittest.TestCase):
         records = self.db.scalars(select(AISummary).order_by(AISummary.id)).all()
         self.assertEqual(len(records), 2)
         self.assertTrue(all(record.model_name == "test-model" and not record.is_mock for record in records))
+
+    @patch("app.api.papers.safe_generate_summary")
+    def test_external_paper_summary_prefers_attached_full_text(self, generate):
+        paper = Paper(
+            user_id=self.user.id,
+            title="External Paper",
+            pdf_path="external://crossref/10.1000/test",
+            full_text="attached external full text",
+            parse_status="success",
+        )
+        self.db.add(paper)
+        self.db.commit()
+        generate.return_value = {
+            "summary": {field: f"value {field}" for field in SUMMARY_FIELDS},
+            "is_mock": False,
+            "model_name": "test-model",
+        }
+        response = self.client.post(f"/api/papers/{paper.id}/summary")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["analysis_scope"], "full_text")
+        generate.assert_called_once_with("attached external full text")
+
+    @patch("app.api.papers.safe_answer_question")
+    def test_external_paper_qa_uses_attached_full_text(self, answer):
+        paper = Paper(
+            user_id=self.user.id,
+            title="External Paper",
+            pdf_path="external://crossref/10.1000/test",
+            full_text="attached external full text",
+            parse_status="success",
+        )
+        self.db.add(paper)
+        self.db.commit()
+        answer.return_value = {
+            "answer": "answer from full text",
+            "evidence": ["evidence"],
+            "has_evidence": True,
+            "is_mock": False,
+            "failure_reason": None,
+        }
+        response = self.client.post(f"/api/papers/{paper.id}/qa", json={"question": "question"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["analysis_scope"], "full_text")
+        answer.assert_called_once_with(
+            "question",
+            "attached external full text",
+            paper_id=paper.id,
+            user_id=self.user.id,
+        )
 
     @patch("app.api.papers.safe_generate_summary")
     def test_persistence_error_log_does_not_include_exception_body(self, generate):
@@ -219,6 +334,34 @@ class AIRouteTests(unittest.TestCase):
         parser.assert_not_called()
         self.assertEqual(remaining_files, [])
         self.assertEqual(self.db.scalar(select(func.count()).select_from(Paper)), 0)
+
+    def test_external_paper_pdf_is_attached_without_creating_a_duplicate(self):
+        paper = Paper(
+            user_id=self.user.id,
+            title="Imported Paper",
+            pdf_path="external://crossref/10.1000/imported",
+            full_text=None,
+            parse_status="external",
+        )
+        self.db.add(paper)
+        self.db.commit()
+        parsed = {"full_text": "parsed imported paper", "abstract": "parsed abstract"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                patch.object(papers.settings, "upload_dir", temp_dir),
+                patch("app.api.papers.extract_text_from_pdf", return_value=parsed),
+                patch("app.api.papers._build_vector_store") as build_index,
+            ):
+                response = self.client.post(
+                    f"/api/papers/{paper.id}/pdf",
+                    files={"file": ("paper.pdf", b"%PDF-1.4 test", "application/pdf")},
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.scalar(select(func.count()).select_from(Paper)), 1)
+        self.db.refresh(paper)
+        self.assertEqual(paper.full_text, "parsed imported paper")
+        self.assertEqual(paper.parse_status, "success")
+        build_index.assert_called_once_with(paper.id, self.user.id, "parsed imported paper")
 
 
 if __name__ == "__main__":

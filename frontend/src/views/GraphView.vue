@@ -205,7 +205,7 @@
         </button>
       </div>
       <div class="drawer-body" v-if="selectedNode">
-        <h2 class="node-title">{{ selectedNode.label || selectedNode.name }}</h2>
+        <h2 class="node-title">{{ selectedNode.displayName || selectedNode.name }}</h2>
         <div class="node-type-badge" :class="{
           'type-local': selectedNode._type === 'local',
           'type-external': selectedNode._type === 'external',
@@ -444,7 +444,7 @@ const renderChart = () => {
         if (params.dataType === 'node') {
           const d = params.data
           const typeLabel = { local: '📄 本地', external: '🌐 外部', recommended: '⭐ 推荐' }
-          return `<strong>${d.label}</strong><br/>类型：${typeLabel[d._type] || '未知'}<br/>作者：${d.authors || '未知'}<br/>年份：${d.year || '未知'}`
+          return `<strong>${d.displayName}</strong><br/>类型：${typeLabel[d._type] || '未知'}<br/>作者：${d.authors || '未知'}<br/>年份：${d.year || '未知'}`
         }
         const edge = edges.value.find(e => e.source === params.data.source && e.target === params.data.target)
         return `${params.data.source} → ${params.data.target}<br/>类型：${edgeLabels[edge?.type] || edge?.type || '关联'}<br/>权重：${((edge?.weight || 0) * 100).toFixed(0)}%`
@@ -462,6 +462,7 @@ const renderChart = () => {
       draggable: true,
       data: displayNodes.map(node => ({
         ...node,
+        displayName: node.title || node.label || node.name || node.id,
         symbolSize: node._type === 'local' ? 50 : node._type === 'recommended' ? 38 : 42,
         itemStyle: {
           color: nodeColors[node._type] || '#667eea',
@@ -474,7 +475,7 @@ const renderChart = () => {
           fontWeight: 500,
           color: '#4a5a6a',
           offset: [0, 8],
-          formatter: (p) => p.data.label?.length > 15 ? p.data.label.slice(0, 15) + '...' : p.data.label
+          formatter: (p) => p.data.displayName?.length > 15 ? p.data.displayName.slice(0, 15) + '...' : p.data.displayName
         }
       })),
       links: displayEdgeData.map(edge => ({

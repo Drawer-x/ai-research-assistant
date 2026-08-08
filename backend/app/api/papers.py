@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -12,6 +12,7 @@ from app.core.response import error_response, success_response
 from app.core.security import get_current_user
 from app.database import SessionLocal, get_db
 from app.models.paper import Paper
+from app.models.paper_external_source import PaperExternalSource
 from app.models.comparison import PaperComparison
 from app.models.qa_record import QARecord
 from app.models.summary import AISummary
@@ -214,6 +215,61 @@ def paper_detail(paper_id: int, db: Session = Depends(get_db), current_user: Use
     return paper if not isinstance(paper, Paper) else success_response(serialize_paper(paper, detail=True))
 
 
+@router.post("/papers/{paper_id}/pdf")
+def attach_external_paper_pdf(paper_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...),
+                              db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    paper = owned_paper_or_error(db, paper_id, current_user.id)
+    if not isinstance(paper, Paper):
+        return paper
+    if not str(paper.pdf_path).startswith("external://"):
+        return error_response("仅外部导入论文支持补传 PDF")
+    filename = Path(file.filename or "").name
+    if Path(filename).suffix.lower() != ".pdf":
+        return error_response("只允许上传 PDF 文件")
+    user_dir = settings.upload_path / str(current_user.id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    destination = user_dir / f"{uuid4().hex}_{filename}"
+    try:
+        written = 0
+        too_large = False
+        with destination.open("wb") as output:
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > settings.max_pdf_upload_bytes:
+                    too_large = True
+                    break
+                output.write(chunk)
+        if too_large:
+            destination.unlink(missing_ok=True)
+            return error_response("PDF 文件过大", 413)
+    except OSError:
+        destination.unlink(missing_ok=True)
+        return error_response("文件保存失败", 500)
+    finally:
+        file.file.close()
+
+    parsed = extract_text_from_pdf(str(destination))
+    full_text = (parsed.get("full_text") or "").strip()
+    if not full_text:
+        destination.unlink(missing_ok=True)
+        return error_response("未能从 PDF 中提取正文，请检查文件是否为扫描件或已加密", 422)
+
+    paper.pdf_path = str(destination.relative_to(settings.upload_path.parent))
+    paper.full_text = full_text
+    paper.abstract = paper.abstract or parsed.get("abstract") or None
+    paper.parse_status = "success"
+    try:
+        db.commit()
+        db.refresh(paper)
+    except Exception as exc:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        logger.error("外部论文 %s 的补传 PDF 保存失败（%s）", paper_id, type(exc).__name__)
+        return error_response("论文全文保存失败", 500)
+    background_tasks.add_task(_build_vector_store, paper.id, current_user.id, full_text)
+    return success_response(serialize_paper(paper, detail=True))
+
+
 @router.put("/papers/{paper_id}")
 def update_paper(paper_id: int, payload: PaperUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
@@ -228,6 +284,10 @@ def update_paper(paper_id: int, payload: PaperUpdate, db: Session = Depends(get_
 def delete_paper(paper_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     paper = owned_paper_or_error(db, paper_id, current_user.id)
     if not isinstance(paper, Paper): return paper
+    db.execute(delete(PaperExternalSource).where(
+        PaperExternalSource.paper_id == paper.id,
+        PaperExternalSource.user_id == current_user.id,
+    ))
     db.delete(paper); db.commit()
     try:
         from app.services.vector_store import delete_vector_store

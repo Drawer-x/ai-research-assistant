@@ -251,7 +251,7 @@ const generateRecommendations = async () => {
     }
   } catch (error) {
     console.error('生成推荐失败:', error)
-    ElMessage.error('生成推荐失败，请重试')
+    ElMessage.error(error.response?.data?.message || '生成推荐失败，请重试')
   } finally {
     loading.value = false
   }

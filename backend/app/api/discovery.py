@@ -1,6 +1,7 @@
 from fastapi import APIRouter,Depends,Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app.core.response import success_response
+from app.core.response import error_response,success_response
 from app.core.security import get_current_user
 from app.database import get_db
 from app.models.user import User
@@ -14,4 +15,10 @@ def search(query:str=Query(min_length=2),year_from:int|None=None,year_to:int|Non
 @router.get("/papers/{external_id:path}")
 def detail(external_id:str,db:Session=Depends(get_db),user:User=Depends(get_current_user)): return success_response(get_external_paper(db,user.id,external_id))
 @router.post("/import")
-def import_paper(payload:DiscoveryImportRequest,db:Session=Depends(get_db),user:User=Depends(get_current_user)): return success_response(import_external_paper(db,user.id,payload.provider,payload.external_id),"paper imported")
+def import_paper(payload:DiscoveryImportRequest,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    try:
+        result=import_external_paper(db,user.id,payload.provider,payload.external_id)
+    except IntegrityError:
+        db.rollback()
+        return error_response("导入失败：文献关联记录冲突，请刷新后重试",409)
+    return success_response(result,"paper imported")
