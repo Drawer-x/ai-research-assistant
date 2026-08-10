@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_pdf_upload_bytes: int = 50 * 1024 * 1024
     algorithm: str = "HS256"
-    ecnu_api_key: str | None = None
+    # ecnu_api_key: str | None = None
+    ecnu_api_key: str = "sk-f60a4eaa247a480680a9fefe97d10855"
     ecnu_api_url: str = "https://chat.ecnu.edu.cn/open/api/v1/chat/completions"
     ecnu_model: str = "ecnu-plus"
     ecnu_api_timeout_seconds: float = 60.0

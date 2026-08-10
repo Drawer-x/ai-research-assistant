@@ -85,6 +85,15 @@ AI Research Assistant 是一个面向学生和科研人员的文献分析平台�
 | 编写基础测试用例  | 已完成  |
 | 更新测试报告|已完成 |
 
+### Sprint 4：新增外部论文发现、智能论文推荐和增强关系图三大功能
+
+| 任务 | 状态 |
+|------|------|
+| 确定新增功能 | 已完成 |
+| 编写测试计划  | 已完成  |
+| 编写基础测试用例  | 已完成  |
+| 更新测试报告|已完成 |
+
 ## 4. 质量目标
 
 | 指标 | 目标值 | 
@@ -99,6 +108,6 @@ AI Research Assistant 是一个面向学生和科研人员的文献分析平台�
 ## 5. 交付物
 
 - 测试计划文档（本文档）
-- 测试用例清单（test_cases_sprint1.md,test_cases_sprint2.md,test_cases_sprint3.md）
+- 测试用例清单（test_cases_sprint1.md,test_cases_sprint2.md,test_cases_sprint3.md,test_cases_sprint4.md）
 
 
